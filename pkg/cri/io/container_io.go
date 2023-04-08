@@ -17,16 +17,15 @@
 package io
 
 import (
-	"errors"
 	"io"
+	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/containerd/containerd/cio"
-	"github.com/sirupsen/logrus"
-
 	"github.com/containerd/containerd/pkg/cri/util"
 	cioutil "github.com/containerd/containerd/pkg/ioutil"
+	"github.com/sirupsen/logrus"
 )
 
 // streamKey generates a key for the stream.
@@ -38,8 +37,9 @@ func streamKey(id, name string, stream StreamType) string {
 type ContainerIO struct {
 	id string
 
-	fifos *cio.FIFOSet
-	*stdioPipes
+	fifos  *cio.FIFOSet
+	vsocks *VsockSet
+	*stdios
 
 	stdoutGroup *cioutil.WriterGroup
 	stderrGroup *cioutil.WriterGroup
@@ -52,15 +52,30 @@ var _ cio.IO = &ContainerIO{}
 // ContainerIOOpts sets specific information to newly created ContainerIO.
 type ContainerIOOpts func(*ContainerIO) error
 
-// WithFIFOs specifies existing fifos for the container io.
+// WithFIFOConfig specifies existing io config for the container io.
+func WithFIFOConfig(config cio.Config) ContainerIOOpts {
+	return func(c *ContainerIO) error {
+		fifos := cio.NewFIFOSetByConfig(config)
+		return WithFIFOs(fifos)(c)
+	}
+}
+
+// WithFIFOs specifies existing iosets for the container io.
 func WithFIFOs(fifos *cio.FIFOSet) ContainerIOOpts {
 	return func(c *ContainerIO) error {
 		c.fifos = fifos
+		// Create actual fifos.
+		stdio, closer, err := newStdioPipes(c.fifos)
+		if err != nil {
+			return err
+		}
+		c.stdios = stdio
+		c.closer = closer
 		return nil
 	}
 }
 
-// WithNewFIFOs creates new fifos for the container io.
+// WithNewFIFOs creates new iosets for the container io.
 func WithNewFIFOs(root string, tty, stdin bool) ContainerIOOpts {
 	return func(c *ContainerIO) error {
 		fifos, err := newFifos(root, c.id, tty, stdin)
@@ -69,6 +84,56 @@ func WithNewFIFOs(root string, tty, stdin bool) ContainerIOOpts {
 		}
 		return WithFIFOs(fifos)(c)
 	}
+}
+
+func WithVSocks(vsocks *VsockSet) ContainerIOOpts {
+	return func(c *ContainerIO) error {
+		c.vsocks = vsocks
+		ios, closer, err := newStdioVsock(c.vsocks)
+		if err != nil {
+			return err
+		}
+		c.stdios = ios
+		c.closer = closer
+		return nil
+	}
+}
+
+func WithVSocksConfig(config cio.Config, sockType string) ContainerIOOpts {
+	return func(c *ContainerIO) error {
+		vsocks, err := newVsockFromConfig(config, sockType)
+		if err != nil {
+			return err
+		}
+		return WithVSocks(vsocks)(c)
+	}
+}
+
+// WithVSockIo creates new hvsock io for the container io.
+func WithVSockIo(vsockIo *VsockSet) ContainerIOOpts {
+	return func(c *ContainerIO) error {
+		return WithVSocks(vsockIo)(c)
+	}
+}
+
+func findAvailablePort(ports map[int]struct{}) int {
+	// find vsock port from 2000
+	for i := 2000; i < 65535; i++ {
+		if _, ok := ports[i]; !ok {
+			return i
+		}
+	}
+	return -1
+}
+
+func convertToPort(std string) int {
+	if len(std) > 0 {
+		urlParts := strings.Split(std, ":")
+		if p, err := strconv.Atoi(urlParts[len(urlParts)-1]); err == nil && p > 0 {
+			return p
+		}
+	}
+	return -1
 }
 
 // NewContainerIO creates container io.
@@ -83,28 +148,23 @@ func NewContainerIO(id string, opts ...ContainerIOOpts) (_ *ContainerIO, err err
 			return nil, err
 		}
 	}
-	if c.fifos == nil {
-		return nil, errors.New("fifos are not set")
-	}
-	// Create actual fifos.
-	stdio, closer, err := newStdioPipes(c.fifos)
-	if err != nil {
-		return nil, err
-	}
-	c.stdioPipes = stdio
-	c.closer = closer
 	return c, nil
 }
 
 // Config returns io config.
 func (c *ContainerIO) Config() cio.Config {
-	return c.fifos.Config
+	if c.fifos != nil {
+		return c.fifos.Config
+	} else {
+		return c.vsocks.config()
+	}
 }
 
-// Pipe creates container fifos and pipe container output
+// Pipe creates container iosets and pipe container output
 // to output stream.
-func (c *ContainerIO) Pipe() {
+func (c *ContainerIO) Pipe() error {
 	wg := c.closer.wg
+
 	if c.stdout != nil {
 		wg.Add(1)
 		go func() {
@@ -118,7 +178,7 @@ func (c *ContainerIO) Pipe() {
 		}()
 	}
 
-	if !c.fifos.Terminal && c.stderr != nil {
+	if !c.Config().Terminal && c.stderr != nil {
 		wg.Add(1)
 		go func() {
 			if _, err := io.Copy(c.stderrGroup, c.stderr); err != nil {
@@ -130,6 +190,7 @@ func (c *ContainerIO) Pipe() {
 			logrus.Debugf("Finish piping stderr of container %q", c.id)
 		}()
 	}
+	return nil
 }
 
 // Attach attaches container stdio.
@@ -218,17 +279,23 @@ func (c *ContainerIO) AddOutput(name string, stdout, stderr io.WriteCloser) (io.
 
 // Cancel cancels container io.
 func (c *ContainerIO) Cancel() {
-	c.closer.Cancel()
+	if c.closer != nil {
+		c.closer.Cancel()
+	}
 }
 
 // Wait waits container io to finish.
 func (c *ContainerIO) Wait() {
-	c.closer.Wait()
+	if c.closer != nil {
+		c.closer.Wait()
+	}
 }
 
 // Close closes all FIFOs.
 func (c *ContainerIO) Close() error {
-	c.closer.Close()
+	if c.closer != nil {
+		c.closer.Close()
+	}
 	if c.fifos != nil {
 		return c.fifos.Close()
 	}

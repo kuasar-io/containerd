@@ -142,8 +142,9 @@ func (b *binary) Start(ctx context.Context, opts *types.Any, onClose func()) (_ 
 	}
 
 	return &shim{
-		bundle: b.bundle,
-		client: conn,
+		bundle:  b.bundle,
+		client:  conn,
+		address: params.Address,
 	}, nil
 }
 

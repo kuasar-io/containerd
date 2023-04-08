@@ -29,6 +29,7 @@ import (
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/oci"
+	"github.com/containerd/containerd/runtime/v2/shim"
 	"k8s.io/client-go/tools/remotecommand"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 
@@ -157,10 +158,33 @@ func (c *criService) execInternal(ctx context.Context, container containerd.Cont
 	log.G(ctx).Debugf("Generated exec id %q for container %q", execID, id)
 	volatileRootDir := c.getVolatileContainerRootDir(id)
 	var execIO *cio.ExecIO
+	ioType, err := c.getIoType(ctx, container)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get io type of container %s, %w", id, err)
+	}
 	process, err := task.Exec(ctx, execID, pspec,
 		func(id string) (containerdio.IO, error) {
 			var err error
-			execIO, err = cio.NewExecIO(id, volatileRootDir, opts.tty, opts.stdin != nil)
+			switch ioType {
+			case shim.DefaultIO, shim.Pipe:
+				execIO, err = cio.NewFIFOExecIO(id, volatileRootDir, opts.tty, opts.stdin != nil)
+			case shim.HVsock, shim.Vsock:
+				cntrInfo, err := container.Info(ctx)
+				if err != nil {
+					return nil, err
+				}
+				sandbox, err := c.sandboxStore.Get(cntrInfo.SandboxID)
+				if err != nil {
+					return nil, err
+				}
+				vsockIo, err := c.allocateVsockIo(ctx, sandbox, ioType, opts.stdin != nil, opts.tty)
+				if err != nil {
+					return nil, fmt.Errorf("failed to load sandbox by id %s : %w", cntrInfo.SandboxID, err)
+				}
+				execIO, err = cio.NewVsockExecIO(id, vsockIo)
+			default:
+				return nil, fmt.Errorf("io_type only support [\"pipe\", \"vsock\", \"hvsock\"")
+			}
 			return execIO, err
 		},
 	)
@@ -305,4 +329,17 @@ func drainExecSyncIO(ctx context.Context, execProcess containerd.Process, drainE
 	}
 	return fmt.Errorf("failed to drain exec process %q io in %s because io is still held by other processes",
 		execProcess.ID(), drainExecIOTimeout)
+}
+
+func (c *criService) getIoType(ctx context.Context, container containerd.Container) (string, error) {
+	cntrInfo, err := container.Info(ctx)
+	if err != nil {
+		return "", err
+	}
+	for _, v := range c.config.ContainerdConfig.Runtimes {
+		if v.Type == cntrInfo.Runtime.Name {
+			return v.IoType, nil
+		}
+	}
+	return "", fmt.Errorf("no runtime with type %s", cntrInfo.Runtime.Name)
 }

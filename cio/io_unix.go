@@ -151,3 +151,35 @@ func NewDirectIO(ctx context.Context, fifos *FIFOSet) (*DirectIO, error) {
 		},
 	}, err
 }
+
+// NewFIFOSetByConfig returns a new FIFOSet with config
+func NewFIFOSetByConfig(config Config) *FIFOSet {
+	fifos := []string{
+		config.Stdin,
+		config.Stdout,
+		config.Stderr,
+	}
+	closer := func() error {
+		var (
+			err  error
+			dirs = map[string]struct{}{}
+		)
+		for _, f := range fifos {
+			if isFifo, _ := fifo.IsFifo(f); isFifo {
+				if rerr := os.Remove(f); err == nil {
+					err = rerr
+				}
+				dirs[filepath.Dir(f)] = struct{}{}
+			}
+		}
+		for dir := range dirs {
+			// we ignore errors here because we don't
+			// want to remove the directory if it isn't
+			// empty
+			os.Remove(dir)
+		}
+		return err
+	}
+
+	return NewFIFOSet(config, closer)
+}

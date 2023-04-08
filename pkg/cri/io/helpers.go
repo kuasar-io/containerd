@@ -59,7 +59,9 @@ type wgCloser struct {
 }
 
 func (g *wgCloser) Wait() {
-	g.wg.Wait()
+	if g.wg != nil {
+		g.wg.Wait()
+	}
 }
 
 func (g *wgCloser) Close() {
@@ -69,7 +71,9 @@ func (g *wgCloser) Close() {
 }
 
 func (g *wgCloser) Cancel() {
-	g.cancel()
+	if g.cancel != nil {
+		g.cancel()
+	}
 }
 
 // newFifos creates fifos directory for a container.
@@ -88,19 +92,19 @@ func newFifos(root, id string, tty, stdin bool) (*cio.FIFOSet, error) {
 	return fifos, nil
 }
 
-type stdioPipes struct {
+type stdios struct {
 	stdin  io.WriteCloser
 	stdout io.ReadCloser
 	stderr io.ReadCloser
 }
 
 // newStdioPipes creates actual fifos for stdio.
-func newStdioPipes(fifos *cio.FIFOSet) (_ *stdioPipes, _ *wgCloser, err error) {
+func newStdioPipes(fifos *cio.FIFOSet) (_ *stdios, _ *wgCloser, err error) {
 	var (
 		f           io.ReadWriteCloser
 		set         []io.Closer
 		ctx, cancel = context.WithCancel(context.Background())
-		p           = &stdioPipes{}
+		p           = &stdios{}
 	)
 	defer func() {
 		if err != nil {

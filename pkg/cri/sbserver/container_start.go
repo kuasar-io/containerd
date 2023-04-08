@@ -106,7 +106,6 @@ func (c *criService) StartContainer(ctx context.Context, r *runtime.StartContain
 			return nil, fmt.Errorf("failed to create container loggers: %w", err)
 		}
 		cntr.IO.AddOutput("log", stdoutWC, stderrWC)
-		cntr.IO.Pipe()
 		return cntr.IO, nil
 	}
 
@@ -138,6 +137,8 @@ func (c *criService) StartContainer(ctx context.Context, r *runtime.StartContain
 			}
 		}
 	}()
+
+	cntr.IO.Pipe()
 
 	// wait is a long running background request, no timeout needed.
 	exitCh, err := task.Wait(ctrdutil.NamespacedContext())

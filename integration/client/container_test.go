@@ -2096,7 +2096,7 @@ func (f *directIO) IOCreate(id string) (cio.IO, error) {
 }
 
 // ioAttach returns IO available for use with task attachment
-func (f *directIO) IOAttach(set *cio.FIFOSet) (cio.IO, error) {
+func (f *directIO) IOAttach(config cio.Config) (cio.IO, error) {
 	return f, nil
 }
 

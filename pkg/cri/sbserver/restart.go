@@ -29,18 +29,17 @@ import (
 	"github.com/containerd/containerd/errdefs"
 	containerdimages "github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/log"
-	criconfig "github.com/containerd/containerd/pkg/cri/config"
-	"github.com/containerd/containerd/pkg/cri/sbserver/podsandbox"
-	"github.com/containerd/containerd/platforms"
-	"github.com/containerd/typeurl/v2"
-	"golang.org/x/sync/errgroup"
-	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
-
 	cio "github.com/containerd/containerd/pkg/cri/io"
+	"github.com/containerd/containerd/pkg/cri/sbserver/podsandbox"
 	containerstore "github.com/containerd/containerd/pkg/cri/store/container"
 	sandboxstore "github.com/containerd/containerd/pkg/cri/store/sandbox"
 	ctrdutil "github.com/containerd/containerd/pkg/cri/util"
 	"github.com/containerd/containerd/pkg/netns"
+	"github.com/containerd/containerd/platforms"
+	"github.com/containerd/containerd/runtime/v2/shim"
+	"github.com/containerd/typeurl/v2"
+	"golang.org/x/sync/errgroup"
+	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
 // NOTE: The recovery logic has following assumption: when the cri plugin is down:
@@ -84,27 +83,23 @@ func (c *criService) recover(ctx context.Context) error {
 	}
 
 	// Recover sandboxes in the new SandboxStore
-	storedSandboxes, err := c.client.SandboxStore().List(ctx)
+	storedSandboxes, err := c.client.Sandboxes(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to list sandboxes from API: %w", err)
 	}
 	for _, sbx := range storedSandboxes {
-		if _, err := c.sandboxStore.Get(sbx.ID); err == nil {
+		if _, err := c.sandboxStore.Get(sbx.ID()); err == nil {
 			continue
 		}
-
+		info := sbx.Info()
 		metadata := sandboxstore.Metadata{}
-		err := sbx.GetExtension(podsandbox.MetadataKey, &metadata)
+		err := info.GetExtension(podsandbox.MetadataKey, &metadata)
 		if err != nil {
 			return fmt.Errorf("failed to get metadata for stored sandbox %q: %w", sbx.ID, err)
 		}
 
-		var (
-			state      = sandboxstore.StateUnknown
-			controller = c.sandboxControllers[criconfig.ModeShim]
-		)
-
-		status, err := controller.Status(ctx, sbx.ID, false)
+		var state = sandboxstore.StateUnknown
+		status, err := sbx.Status(ctx, false)
 		if err != nil {
 			log.G(ctx).WithError(err).Error("failed to recover sandbox state")
 			if errdefs.IsNotFound(err) {
@@ -120,10 +115,15 @@ func (c *criService) recover(ctx context.Context) error {
 			}
 		}
 
-		sb := sandboxstore.NewSandbox(metadata, sandboxstore.Status{State: state})
+		sb := sandboxstore.NewSandbox(metadata, sandboxstore.Status{
+			State:       state,
+			Pid:         status.Pid,
+			TaskAddress: status.TaskAddress,
+		})
 
 		// Load network namespace.
 		sb.NetNS = getNetNS(&metadata)
+		sb.SandboxInstance = sbx
 
 		if err := c.sandboxStore.Add(sb); err != nil {
 			return fmt.Errorf("failed to add stored sandbox %q to store: %w", sbx.ID, err)
@@ -249,7 +249,7 @@ func (c *criService) loadContainer(ctx context.Context, cntr containerd.Containe
 	var containerIO *cio.ContainerIO
 	err = func() error {
 		// Load up-to-date status from containerd.
-		t, err := cntr.Task(ctx, func(fifos *containerdio.FIFOSet) (_ containerdio.IO, err error) {
+		t, err := cntr.Task(ctx, func(config containerdio.Config) (_ containerdio.IO, err error) {
 			stdoutWC, stderrWC, err := c.createContainerLoggers(meta.LogPath, meta.Config.GetTty())
 			if err != nil {
 				return nil, err
@@ -264,9 +264,19 @@ func (c *criService) loadContainer(ctx context.Context, cntr containerd.Containe
 					}
 				}
 			}()
-			containerIO, err = cio.NewContainerIO(id,
-				cio.WithFIFOs(fifos),
-			)
+			if cio.IsHybridVsockIo(&config) {
+				containerIO, err = cio.NewContainerIO(id,
+					cio.WithVSocksConfig(config, shim.HVsock),
+				)
+			} else if cio.IsVsockIo(&config) {
+				containerIO, err = cio.NewContainerIO(id,
+					cio.WithVSocksConfig(config, shim.Vsock),
+				)
+			} else {
+				containerIO, err = cio.NewContainerIO(id,
+					cio.WithFIFOConfig(config),
+				)
+			}
 			if err != nil {
 				return nil, err
 			}
@@ -473,7 +483,6 @@ func (c *criService) loadSandbox(ctx context.Context, cntr containerd.Container)
 
 	sandbox = sandboxstore.NewSandbox(*meta, s)
 	sandbox.Container = cntr
-
 	// Load network namespace.
 	sandbox.NetNS = getNetNS(meta)
 

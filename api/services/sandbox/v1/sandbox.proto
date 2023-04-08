@@ -89,6 +89,9 @@ service Controller {
 	rpc Create(ControllerCreateRequest) returns (ControllerCreateResponse);
 	rpc Start(ControllerStartRequest) returns (ControllerStartResponse);
 	rpc Platform(ControllerPlatformRequest) returns (ControllerPlatformResponse);
+	rpc Prepare(PrepareRequest) returns (PrepareResponse);
+	rpc Purge(PurgeRequest) returns (PurgeResponse);
+	rpc UpdateResources(UpdateResourcesRequest) returns (UpdateResourcesResponse);
 	rpc Stop(ControllerStopRequest) returns (ControllerStopResponse);
 	rpc Wait(ControllerWaitRequest) returns (ControllerWaitResponse);
 	rpc Status(ControllerStatusRequest) returns (ControllerStatusResponse);
@@ -96,10 +99,11 @@ service Controller {
 }
 
 message ControllerCreateRequest {
-	string sandbox_id = 1;
-	repeated containerd.types.Mount rootfs = 2;
-	google.protobuf.Any options = 3;
-	string netns_path = 4;
+	string sandboxer = 1;
+	string sandbox_id = 2;
+	repeated containerd.types.Mount rootfs = 3;
+	google.protobuf.Any options = 4;
+	string netns_path = 5;
 }
 
 message ControllerCreateResponse {
@@ -107,7 +111,8 @@ message ControllerCreateResponse {
 }
 
 message ControllerStartRequest {
-	string sandbox_id = 1;
+	string sandboxer = 1;
+	string sandbox_id = 2;
 }
 
 message ControllerStartResponse {
@@ -118,7 +123,8 @@ message ControllerStartResponse {
 }
 
 message ControllerPlatformRequest {
-	string sandbox_id = 1;
+	string sandboxer = 1;
+	string sandbox_id = 2;
 }
 
 message ControllerPlatformResponse {
@@ -126,14 +132,16 @@ message ControllerPlatformResponse {
 }
 
 message ControllerStopRequest {
-	string sandbox_id = 1;
-	uint32 timeout_secs = 2;
+	string sandboxer = 1;
+	string sandbox_id = 2;
+	uint32 timeout_secs = 3;
 }
 
 message ControllerStopResponse {}
 
 message ControllerWaitRequest {
-	string sandbox_id = 1;
+	string sandboxer = 1;
+	string sandbox_id = 2;
 }
 
 message ControllerWaitResponse {
@@ -142,22 +150,61 @@ message ControllerWaitResponse {
 }
 
 message ControllerStatusRequest {
-	string sandbox_id = 1;
-	bool verbose = 2;
+	string sandboxer = 1;
+	string sandbox_id = 2;
+	bool verbose = 3;
 }
 
 message ControllerStatusResponse {
 	string sandbox_id = 1;
 	uint32 pid = 2;
 	string state = 3;
-	map<string, string> info = 4;
-	google.protobuf.Timestamp created_at = 5;
-	google.protobuf.Timestamp exited_at = 6;
-	google.protobuf.Any extra = 7;
+	string task_address = 4;
+	map<string, string> info = 5;
+	google.protobuf.Timestamp created_at = 6;
+	google.protobuf.Timestamp exited_at = 7;
+	google.protobuf.Any extra = 8;
 }
 
 message ControllerShutdownRequest {
-	string sandbox_id = 1;
+	string sandboxer = 1;
+	string sandbox_id = 2;
 }
 
 message ControllerShutdownResponse {}
+
+message PrepareRequest {
+	string sandboxer = 1;
+	string sandbox_id = 2;
+	string container_id = 3;
+	string exec_id = 4;
+	google.protobuf.Any spec = 5;
+	repeated containerd.types.Mount rootfs = 6;
+	string stdin = 7;
+	string stdout = 8;
+	string stderr = 9;
+	bool terminal = 10;
+}
+
+message PrepareResponse {
+	string bundle = 1;
+}
+
+message PurgeRequest {
+	string sandboxer = 1;
+	string sandbox_id = 2;
+	string container_id = 3;
+	string exec_id = 4;
+}
+
+message PurgeResponse {}
+
+message UpdateResourcesRequest {
+	string sandboxer = 1;
+	string sandbox_id = 2;
+	string container_id = 3;
+	google.protobuf.Any resources = 4;
+	map<string, string> annotations = 5;
+}
+
+message UpdateResourcesResponse {}

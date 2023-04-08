@@ -38,11 +38,10 @@ import (
 func init() {
 	plugin.Register(&plugin.Registration{
 		Type: plugin.SandboxControllerPlugin,
-		ID:   "local",
+		ID:   "shim",
 		Requires: []plugin.Type{
 			plugin.RuntimePluginV2,
 			plugin.EventPlugin,
-			plugin.SandboxStorePlugin,
 		},
 		InitFn: func(ic *plugin.InitContext) (interface{}, error) {
 			shimPlugin, err := ic.GetByID(plugin.RuntimePluginV2, "shim")
@@ -55,20 +54,13 @@ func init() {
 				return nil, err
 			}
 
-			sbPlugin, err := ic.GetByID(plugin.SandboxStorePlugin, "local")
-			if err != nil {
-				return nil, err
-			}
-
 			var (
 				shims     = shimPlugin.(*v2.ShimManager)
 				publisher = exchangePlugin.(*exchange.Exchange)
-				store     = sbPlugin.(sandbox.Store)
 			)
 
 			return &controllerLocal{
 				shims:     shims,
-				store:     store,
 				publisher: publisher,
 			}, nil
 		},
@@ -83,19 +75,15 @@ type controllerLocal struct {
 
 var _ sandbox.Controller = (*controllerLocal)(nil)
 
-func (c *controllerLocal) Create(ctx context.Context, sandboxID string, opts ...sandbox.CreateOpt) error {
+func (c *controllerLocal) Create(ctx context.Context, info sandbox.Sandbox, opts ...sandbox.CreateOpt) error {
 	var coptions sandbox.CreateOptions
+	sandboxID := info.ID
 	for _, opt := range opts {
 		opt(&coptions)
 	}
 
 	if _, err := c.shims.Get(ctx, sandboxID); err == nil {
 		return fmt.Errorf("sandbox %s already running: %w", sandboxID, errdefs.ErrAlreadyExists)
-	}
-
-	info, err := c.store.Get(ctx, sandboxID)
-	if err != nil {
-		return fmt.Errorf("failed to query sandbox metadata from store: %w", err)
 	}
 
 	shim, err := c.shims.Start(ctx, sandboxID, runtime.CreateOpts{
@@ -268,12 +256,25 @@ func (c *controllerLocal) Status(ctx context.Context, sandboxID string, verbose 
 	}
 
 	return sandbox.ControllerStatus{
-		SandboxID: resp.GetSandboxID(),
-		Pid:       resp.GetPid(),
-		State:     resp.GetState(),
-		ExitedAt:  resp.GetCreatedAt().AsTime(),
-		Extra:     resp.GetExtra(),
+		SandboxID:   resp.GetSandboxID(),
+		Pid:         resp.GetPid(),
+		State:       resp.GetState(),
+		TaskAddress: resp.GetTaskAddress(),
+		ExitedAt:    resp.GetCreatedAt().AsTime(),
+		Extra:       resp.GetExtra(),
 	}, nil
+}
+
+func (c *controllerLocal) Prepare(ctx context.Context, sandboxID string, opts ...sandbox.PrepareOpt) (sandbox.PrepareResult, error) {
+	return sandbox.PrepareResult{}, nil
+}
+
+func (c *controllerLocal) Purge(ctx context.Context, sandboxID string, containerID string, execID string) error {
+	return nil
+}
+
+func (c *controllerLocal) UpdateResources(ctx context.Context, sandboxID string, opts ...sandbox.UpdateResourceOpt) error {
+	return nil
 }
 
 func (c *controllerLocal) getSandbox(ctx context.Context, id string) (runtimeAPI.TTRPCSandboxService, error) {

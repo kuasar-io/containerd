@@ -1098,6 +1098,13 @@ file {
       type_name: ".google.protobuf.Any"
       json_name: "extra"
     }
+    field {
+      name: "task_address"
+      number: 8
+      label: LABEL_OPTIONAL
+      type: TYPE_STRING
+      json_name: "taskAddress"
+    }
     nested_type {
       name: "InfoEntry"
       field {
@@ -4176,6 +4183,7 @@ file {
     java_outer_classname: "StatusProto"
     java_multiple_files: true
     go_package: "google.golang.org/genproto/googleapis/rpc/status;status"
+    cc_enable_arenas: true
     objc_class_prefix: "RPC"
   }
   syntax: "proto3"
@@ -4785,8 +4793,15 @@ file {
       json_name: "spec"
     }
     field {
-      name: "labels"
+      name: "sandboxer"
       number: 4
+      label: LABEL_OPTIONAL
+      type: TYPE_STRING
+      json_name: "sandboxer"
+    }
+    field {
+      name: "labels"
+      number: 5
       label: LABEL_REPEATED
       type: TYPE_MESSAGE
       type_name: ".containerd.types.Sandbox.LabelsEntry"
@@ -4794,7 +4809,7 @@ file {
     }
     field {
       name: "created_at"
-      number: 5
+      number: 6
       label: LABEL_OPTIONAL
       type: TYPE_MESSAGE
       type_name: ".google.protobuf.Timestamp"
@@ -4802,7 +4817,7 @@ file {
     }
     field {
       name: "updated_at"
-      number: 6
+      number: 7
       label: LABEL_OPTIONAL
       type: TYPE_MESSAGE
       type_name: ".google.protobuf.Timestamp"
@@ -4810,7 +4825,7 @@ file {
     }
     field {
       name: "extensions"
-      number: 7
+      number: 8
       label: LABEL_REPEATED
       type: TYPE_MESSAGE
       type_name: ".containerd.types.Sandbox.ExtensionsEntry"
@@ -4998,15 +5013,22 @@ file {
   message_type {
     name: "ControllerCreateRequest"
     field {
-      name: "sandbox_id"
+      name: "sandboxer"
       number: 1
+      label: LABEL_OPTIONAL
+      type: TYPE_STRING
+      json_name: "sandboxer"
+    }
+    field {
+      name: "sandbox_id"
+      number: 2
       label: LABEL_OPTIONAL
       type: TYPE_STRING
       json_name: "sandboxId"
     }
     field {
       name: "rootfs"
-      number: 2
+      number: 3
       label: LABEL_REPEATED
       type: TYPE_MESSAGE
       type_name: ".containerd.types.Mount"
@@ -5014,7 +5036,7 @@ file {
     }
     field {
       name: "options"
-      number: 3
+      number: 4
       label: LABEL_OPTIONAL
       type: TYPE_MESSAGE
       type_name: ".google.protobuf.Any"
@@ -5022,7 +5044,7 @@ file {
     }
     field {
       name: "netns_path"
-      number: 4
+      number: 5
       label: LABEL_OPTIONAL
       type: TYPE_STRING
       json_name: "netnsPath"
@@ -5041,8 +5063,15 @@ file {
   message_type {
     name: "ControllerStartRequest"
     field {
-      name: "sandbox_id"
+      name: "sandboxer"
       number: 1
+      label: LABEL_OPTIONAL
+      type: TYPE_STRING
+      json_name: "sandboxer"
+    }
+    field {
+      name: "sandbox_id"
+      number: 2
       label: LABEL_OPTIONAL
       type: TYPE_STRING
       json_name: "sandboxId"
@@ -5104,8 +5133,15 @@ file {
   message_type {
     name: "ControllerPlatformRequest"
     field {
-      name: "sandbox_id"
+      name: "sandboxer"
       number: 1
+      label: LABEL_OPTIONAL
+      type: TYPE_STRING
+      json_name: "sandboxer"
+    }
+    field {
+      name: "sandbox_id"
+      number: 2
       label: LABEL_OPTIONAL
       type: TYPE_STRING
       json_name: "sandboxId"
@@ -5125,15 +5161,22 @@ file {
   message_type {
     name: "ControllerStopRequest"
     field {
-      name: "sandbox_id"
+      name: "sandboxer"
       number: 1
+      label: LABEL_OPTIONAL
+      type: TYPE_STRING
+      json_name: "sandboxer"
+    }
+    field {
+      name: "sandbox_id"
+      number: 2
       label: LABEL_OPTIONAL
       type: TYPE_STRING
       json_name: "sandboxId"
     }
     field {
       name: "timeout_secs"
-      number: 2
+      number: 3
       label: LABEL_OPTIONAL
       type: TYPE_UINT32
       json_name: "timeoutSecs"
@@ -5145,8 +5188,15 @@ file {
   message_type {
     name: "ControllerWaitRequest"
     field {
-      name: "sandbox_id"
+      name: "sandboxer"
       number: 1
+      label: LABEL_OPTIONAL
+      type: TYPE_STRING
+      json_name: "sandboxer"
+    }
+    field {
+      name: "sandbox_id"
+      number: 2
       label: LABEL_OPTIONAL
       type: TYPE_STRING
       json_name: "sandboxId"
@@ -5173,15 +5223,22 @@ file {
   message_type {
     name: "ControllerStatusRequest"
     field {
-      name: "sandbox_id"
+      name: "sandboxer"
       number: 1
+      label: LABEL_OPTIONAL
+      type: TYPE_STRING
+      json_name: "sandboxer"
+    }
+    field {
+      name: "sandbox_id"
+      number: 2
       label: LABEL_OPTIONAL
       type: TYPE_STRING
       json_name: "sandboxId"
     }
     field {
       name: "verbose"
-      number: 2
+      number: 3
       label: LABEL_OPTIONAL
       type: TYPE_BOOL
       json_name: "verbose"
@@ -5211,8 +5268,15 @@ file {
       json_name: "state"
     }
     field {
-      name: "info"
+      name: "task_address"
       number: 4
+      label: LABEL_OPTIONAL
+      type: TYPE_STRING
+      json_name: "taskAddress"
+    }
+    field {
+      name: "info"
+      number: 5
       label: LABEL_REPEATED
       type: TYPE_MESSAGE
       type_name: ".containerd.services.sandbox.v1.ControllerStatusResponse.InfoEntry"
@@ -5220,7 +5284,7 @@ file {
     }
     field {
       name: "created_at"
-      number: 5
+      number: 6
       label: LABEL_OPTIONAL
       type: TYPE_MESSAGE
       type_name: ".google.protobuf.Timestamp"
@@ -5228,7 +5292,7 @@ file {
     }
     field {
       name: "exited_at"
-      number: 6
+      number: 7
       label: LABEL_OPTIONAL
       type: TYPE_MESSAGE
       type_name: ".google.protobuf.Timestamp"
@@ -5236,7 +5300,7 @@ file {
     }
     field {
       name: "extra"
-      number: 7
+      number: 8
       label: LABEL_OPTIONAL
       type: TYPE_MESSAGE
       type_name: ".google.protobuf.Any"
@@ -5266,8 +5330,15 @@ file {
   message_type {
     name: "ControllerShutdownRequest"
     field {
-      name: "sandbox_id"
+      name: "sandboxer"
       number: 1
+      label: LABEL_OPTIONAL
+      type: TYPE_STRING
+      json_name: "sandboxer"
+    }
+    field {
+      name: "sandbox_id"
+      number: 2
       label: LABEL_OPTIONAL
       type: TYPE_STRING
       json_name: "sandboxId"
@@ -5275,6 +5346,188 @@ file {
   }
   message_type {
     name: "ControllerShutdownResponse"
+  }
+  message_type {
+    name: "PrepareRequest"
+    field {
+      name: "sandboxer"
+      number: 1
+      label: LABEL_OPTIONAL
+      type: TYPE_STRING
+      json_name: "sandboxer"
+    }
+    field {
+      name: "sandbox_id"
+      number: 2
+      label: LABEL_OPTIONAL
+      type: TYPE_STRING
+      json_name: "sandboxId"
+    }
+    field {
+      name: "container_id"
+      number: 3
+      label: LABEL_OPTIONAL
+      type: TYPE_STRING
+      json_name: "containerId"
+    }
+    field {
+      name: "exec_id"
+      number: 4
+      label: LABEL_OPTIONAL
+      type: TYPE_STRING
+      json_name: "execId"
+    }
+    field {
+      name: "spec"
+      number: 5
+      label: LABEL_OPTIONAL
+      type: TYPE_MESSAGE
+      type_name: ".google.protobuf.Any"
+      json_name: "spec"
+    }
+    field {
+      name: "rootfs"
+      number: 6
+      label: LABEL_REPEATED
+      type: TYPE_MESSAGE
+      type_name: ".containerd.types.Mount"
+      json_name: "rootfs"
+    }
+    field {
+      name: "stdin"
+      number: 7
+      label: LABEL_OPTIONAL
+      type: TYPE_STRING
+      json_name: "stdin"
+    }
+    field {
+      name: "stdout"
+      number: 8
+      label: LABEL_OPTIONAL
+      type: TYPE_STRING
+      json_name: "stdout"
+    }
+    field {
+      name: "stderr"
+      number: 9
+      label: LABEL_OPTIONAL
+      type: TYPE_STRING
+      json_name: "stderr"
+    }
+    field {
+      name: "terminal"
+      number: 10
+      label: LABEL_OPTIONAL
+      type: TYPE_BOOL
+      json_name: "terminal"
+    }
+  }
+  message_type {
+    name: "PrepareResponse"
+    field {
+      name: "bundle"
+      number: 1
+      label: LABEL_OPTIONAL
+      type: TYPE_STRING
+      json_name: "bundle"
+    }
+  }
+  message_type {
+    name: "PurgeRequest"
+    field {
+      name: "sandboxer"
+      number: 1
+      label: LABEL_OPTIONAL
+      type: TYPE_STRING
+      json_name: "sandboxer"
+    }
+    field {
+      name: "sandbox_id"
+      number: 2
+      label: LABEL_OPTIONAL
+      type: TYPE_STRING
+      json_name: "sandboxId"
+    }
+    field {
+      name: "container_id"
+      number: 3
+      label: LABEL_OPTIONAL
+      type: TYPE_STRING
+      json_name: "containerId"
+    }
+    field {
+      name: "exec_id"
+      number: 4
+      label: LABEL_OPTIONAL
+      type: TYPE_STRING
+      json_name: "execId"
+    }
+  }
+  message_type {
+    name: "PurgeResponse"
+  }
+  message_type {
+    name: "UpdateResourcesRequest"
+    field {
+      name: "sandboxer"
+      number: 1
+      label: LABEL_OPTIONAL
+      type: TYPE_STRING
+      json_name: "sandboxer"
+    }
+    field {
+      name: "sandbox_id"
+      number: 2
+      label: LABEL_OPTIONAL
+      type: TYPE_STRING
+      json_name: "sandboxId"
+    }
+    field {
+      name: "container_id"
+      number: 3
+      label: LABEL_OPTIONAL
+      type: TYPE_STRING
+      json_name: "containerId"
+    }
+    field {
+      name: "resources"
+      number: 4
+      label: LABEL_OPTIONAL
+      type: TYPE_MESSAGE
+      type_name: ".google.protobuf.Any"
+      json_name: "resources"
+    }
+    field {
+      name: "annotations"
+      number: 5
+      label: LABEL_REPEATED
+      type: TYPE_MESSAGE
+      type_name: ".containerd.services.sandbox.v1.UpdateResourcesRequest.AnnotationsEntry"
+      json_name: "annotations"
+    }
+    nested_type {
+      name: "AnnotationsEntry"
+      field {
+        name: "key"
+        number: 1
+        label: LABEL_OPTIONAL
+        type: TYPE_STRING
+        json_name: "key"
+      }
+      field {
+        name: "value"
+        number: 2
+        label: LABEL_OPTIONAL
+        type: TYPE_STRING
+        json_name: "value"
+      }
+      options {
+        map_entry: true
+      }
+    }
+  }
+  message_type {
+    name: "UpdateResourcesResponse"
   }
   service {
     name: "Store"
@@ -5320,6 +5573,21 @@ file {
       name: "Platform"
       input_type: ".containerd.services.sandbox.v1.ControllerPlatformRequest"
       output_type: ".containerd.services.sandbox.v1.ControllerPlatformResponse"
+    }
+    method {
+      name: "Prepare"
+      input_type: ".containerd.services.sandbox.v1.PrepareRequest"
+      output_type: ".containerd.services.sandbox.v1.PrepareResponse"
+    }
+    method {
+      name: "Purge"
+      input_type: ".containerd.services.sandbox.v1.PurgeRequest"
+      output_type: ".containerd.services.sandbox.v1.PurgeResponse"
+    }
+    method {
+      name: "UpdateResources"
+      input_type: ".containerd.services.sandbox.v1.UpdateResourcesRequest"
+      output_type: ".containerd.services.sandbox.v1.UpdateResourcesResponse"
     }
     method {
       name: "Stop"
@@ -6003,6 +6271,20 @@ file {
       label: LABEL_OPTIONAL
       type: TYPE_STRING
       json_name: "runtimePath"
+    }
+    field {
+      name: "task_address"
+      number: 11
+      label: LABEL_OPTIONAL
+      type: TYPE_STRING
+      json_name: "taskAddress"
+    }
+    field {
+      name: "bundle"
+      number: 12
+      label: LABEL_OPTIONAL
+      type: TYPE_STRING
+      json_name: "bundle"
     }
   }
   message_type {

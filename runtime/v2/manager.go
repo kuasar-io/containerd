@@ -182,33 +182,39 @@ func (m *ShimManager) ID() string {
 
 // Start launches a new shim instance
 func (m *ShimManager) Start(ctx context.Context, id string, opts runtime.CreateOpts) (_ ShimInstance, retErr error) {
-	bundle, err := NewBundle(ctx, m.root, m.state, id, opts.Spec)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if retErr != nil {
-			bundle.Delete()
-		}
-	}()
-
-	// This container belongs to sandbox which supposed to be already started via sandbox API.
-	if opts.SandboxID != "" {
-		process, err := m.Get(ctx, opts.SandboxID)
+	var bundle *Bundle
+	// If the Bundle is already specified, it means the bundle may already been prepared
+	// maybe by sandbox. the bundle may lie in the sub path of the sandbox, we just make a symlink to it
+	// we do this symlink because we have to scan the task path when we do restart recovering.
+	if opts.Bundle != "" {
+		ns, err := namespaces.NamespaceRequired(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("can't find sandbox %s", opts.SandboxID)
-		}
-
-		// Write sandbox ID this task belongs to.
-		if err := os.WriteFile(filepath.Join(bundle.Path, "sandbox"), []byte(opts.SandboxID), 0600); err != nil {
 			return nil, err
 		}
-
-		address, err := shimbinary.ReadAddress(filepath.Join(m.state, process.Namespace(), opts.SandboxID, "address"))
-		if err != nil {
-			return nil, fmt.Errorf("failed to get socket address for sandbox %q: %w", opts.SandboxID, err)
+		bundle = &Bundle{
+			ID:        id,
+			Path:      opts.Bundle,
+			Namespace: ns,
 		}
+		if err := os.Symlink(opts.Bundle, filepath.Join(m.state, ns, id)); err != nil {
+			return nil, err
+		}
+	} else {
+		var err error
+		bundle, err = NewBundle(ctx, m.root, m.state, id, opts.Spec)
+		if err != nil {
+			return nil, err
+		}
+		defer func() {
+			if retErr != nil {
+				bundle.Delete()
+			}
+		}()
+	}
 
+	// This container belongs to sandbox which supposed to be already started via sandbox API.
+	if opts.TaskAddress != "" {
+		address := opts.TaskAddress
 		// Use sandbox's socket address to handle task requests for this container.
 		if err := shimbinary.WriteAddress(filepath.Join(bundle.Path, "address"), address); err != nil {
 			return nil, err
@@ -216,7 +222,7 @@ func (m *ShimManager) Start(ctx context.Context, id string, opts runtime.CreateO
 
 		shim, err := loadShim(ctx, bundle, func() {})
 		if err != nil {
-			return nil, fmt.Errorf("failed to load sandbox task %q: %w", opts.SandboxID, err)
+			return nil, fmt.Errorf("failed to load sandbox task %q: %w", opts.TaskAddress, err)
 		}
 
 		if err := m.shims.Add(ctx, shim); err != nil {
@@ -438,7 +444,7 @@ func (m *TaskManager) Create(ctx context.Context, taskID string, opts runtime.Cr
 		dctx, cancel := timeout.WithContext(cleanup.Background(ctx), cleanupTimeout)
 		defer cancel()
 
-		sandboxed := opts.SandboxID != ""
+		sandboxed := opts.TaskAddress != ""
 		_, errShim := shimTask.delete(dctx, sandboxed, func(context.Context, string) {})
 		if errShim != nil {
 			if errdefs.IsDeadlineExceeded(errShim) {

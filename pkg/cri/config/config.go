@@ -86,11 +86,14 @@ type Runtime struct {
 	// while using default snapshotters for operational simplicity.
 	// See https://github.com/containerd/containerd/issues/6657 for details.
 	Snapshotter string `toml:"snapshotter" json:"snapshotter"`
-	// SandboxMode defines which sandbox runtime to use when scheduling pods
+	// Sandboxer defines which sandbox runtime to use when scheduling pods
 	// This features requires experimental CRI server to be enabled (use ENABLE_CRI_SANDBOXES=1)
 	// shim - means use whatever Controller implementation provided by shim (e.g. use RemoteController).
 	// podsandbox - means use Controller implementation from sbserver podsandbox package.
-	SandboxMode string `toml:"sandbox_mode" json:"sandboxMode"`
+	Sandboxer string `toml:"sandboxer" json:"sandboxer"`
+	// IoType setting io type for the runtime.
+	// typical io type is "pipe", you can also use "socket", "vsock", "hvsock".
+	IoType string `toml:"io_type" json:"io_type"`
 }
 
 // ContainerdConfig contains toml config related to containerd
@@ -456,8 +459,8 @@ func ValidatePluginConfig(ctx context.Context, c *PluginConfig) error {
 			return errors.New("`privileged_without_host_devices_all_devices_allowed` requires `privileged_without_host_devices` to be enabled")
 		}
 		// If empty, use default podSandbox mode
-		if len(r.SandboxMode) == 0 {
-			r.SandboxMode = string(ModePodSandbox)
+		if len(r.Sandboxer) == 0 {
+			r.Sandboxer = string(ModePodSandbox)
 			c.ContainerdConfig.Runtimes[k] = r
 		}
 	}

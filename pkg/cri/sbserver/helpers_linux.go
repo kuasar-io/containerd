@@ -41,6 +41,8 @@ import (
 const (
 	// devShm is the default path of /dev/shm.
 	devShm = "/dev/shm"
+	// defaultShmSize is the default size of the sandbox shm.
+	defaultShmSize = int64(1024 * 1024 * 64)
 	// etcHosts is the default path of /etc/hosts file.
 	etcHosts = "/etc/hosts"
 	// etcHostname is the default path of /etc/hostname file.

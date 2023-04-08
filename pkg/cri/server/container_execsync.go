@@ -162,7 +162,7 @@ func (c *criService) execInternal(ctx context.Context, container containerd.Cont
 	process, err := task.Exec(ctx, execID, pspec,
 		func(id string) (containerdio.IO, error) {
 			var err error
-			execIO, err = cio.NewExecIO(id, volatileRootDir, opts.tty, opts.stdin != nil)
+			execIO, err = cio.NewFIFOExecIO(id, volatileRootDir, opts.tty, opts.stdin != nil)
 			return execIO, err
 		},
 	)

@@ -65,16 +65,6 @@ func getCgroupsPath(cgroupsParent, id string) string {
 	return filepath.Join(cgroupsParent, id)
 }
 
-// getSandboxHostname returns the hostname file path inside the sandbox root directory.
-func (c *Controller) getSandboxHostname(id string) string {
-	return filepath.Join(c.getSandboxRootDir(id), "hostname")
-}
-
-// getSandboxHosts returns the hosts file path inside the sandbox root directory.
-func (c *Controller) getSandboxHosts(id string) string {
-	return filepath.Join(c.getSandboxRootDir(id), "hosts")
-}
-
 // getResolvPath returns resolv.conf filepath for specified sandbox.
 func (c *Controller) getResolvPath(id string) string {
 	return filepath.Join(c.getSandboxRootDir(id), "resolv.conf")

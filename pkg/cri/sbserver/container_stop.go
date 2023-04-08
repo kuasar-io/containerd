@@ -171,6 +171,9 @@ func (c *criService) stopContainer(ctx context.Context, container containerstore
 		defer sigTermCtxCancel()
 		err = c.waitContainerStop(sigTermCtx, container)
 		if err == nil {
+			if err := c.purgeContainerInSandbox(ctx, sandboxID, container.ID); err != nil {
+				return err
+			}
 			// Container stopped on first signal no need for SIGKILL
 			return nil
 		}
@@ -192,6 +195,11 @@ func (c *criService) stopContainer(ctx context.Context, container containerstore
 	if err != nil {
 		return fmt.Errorf("an error occurs during waiting for container %q to be killed: %w", id, err)
 	}
+
+	if err := c.purgeContainerInSandbox(ctx, sandboxID, container.ID); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -216,4 +224,15 @@ func cleanupUnknownContainer(ctx context.Context, id string, cntr containerstore
 		ExitStatus:  unknownExitCode,
 		ExitedAt:    protobuf.ToTimestamp(time.Now()),
 	}, cntr, sandboxID, c)
+}
+
+// purgeContainerInSandbox purges container resource in sandbox.
+func (c *criService) purgeContainerInSandbox(ctx context.Context, sandboxID string, containerID string) error {
+	sandbox, err := c.sandboxStore.Get(sandboxID)
+	if err == nil {
+		if err := sandbox.SandboxInstance.Purge(ctx, containerID, ""); err != nil && err != errdefs.ErrNotFound {
+			return err
+		}
+	}
+	return nil
 }

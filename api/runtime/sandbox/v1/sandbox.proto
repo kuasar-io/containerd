@@ -121,6 +121,7 @@ message SandboxStatusResponse {
 	google.protobuf.Timestamp created_at = 5;
 	google.protobuf.Timestamp exited_at = 6;
 	google.protobuf.Any extra = 7;
+	string task_address = 8;
 }
 
 message PingRequest {

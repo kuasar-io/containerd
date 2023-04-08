@@ -275,6 +275,19 @@ func (c *Client) Containers(ctx context.Context, filters ...string) ([]Container
 	return out, nil
 }
 
+// Sandboxes returns all sandboxes created in containerd
+func (c *Client) Sandboxes(ctx context.Context, filters ...string) ([]Sandbox, error) {
+	r, err := c.SandboxStore().List(ctx, filters...)
+	if err != nil {
+		return nil, err
+	}
+	var out []Sandbox
+	for _, s := range r {
+		out = append(out, sandboxFromRecord(c, s))
+	}
+	return out, nil
+}
+
 // NewContainer will create a new container with the provided id.
 // The id must be unique within the namespace.
 func (c *Client) NewContainer(ctx context.Context, id string, opts ...NewContainerOpts) (Container, error) {
@@ -715,9 +728,13 @@ func (c *Client) SandboxStore() sandbox.Store {
 }
 
 // SandboxController returns the underlying sandbox controller client
-func (c *Client) SandboxController() sandbox.Controller {
-	if c.sandboxController != nil {
-		return c.sandboxController
+func (c *Client) SandboxController(name string) sandbox.Controller {
+	// default sandboxer is shim
+	if len(name) == 0 {
+		name = "shim"
+	}
+	if c.sandboxers != nil {
+		return c.sandboxers[name]
 	}
 	c.connMu.Lock()
 	defer c.connMu.Unlock()

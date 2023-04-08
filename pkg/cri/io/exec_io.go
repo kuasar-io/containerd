@@ -28,16 +28,17 @@ import (
 
 // ExecIO holds the exec io.
 type ExecIO struct {
-	id    string
-	fifos *cio.FIFOSet
-	*stdioPipes
+	id     string
+	fifos  *cio.FIFOSet
+	vsocks *VsockSet
+	*stdios
 	closer *wgCloser
 }
 
 var _ cio.IO = &ExecIO{}
 
-// NewExecIO creates exec io.
-func NewExecIO(id, root string, tty, stdin bool) (*ExecIO, error) {
+// NewFIFOExecIO creates exec io.
+func NewFIFOExecIO(id, root string, tty, stdin bool) (*ExecIO, error) {
 	fifos, err := newFifos(root, id, tty, stdin)
 	if err != nil {
 		return nil, err
@@ -47,16 +48,33 @@ func NewExecIO(id, root string, tty, stdin bool) (*ExecIO, error) {
 		return nil, err
 	}
 	return &ExecIO{
-		id:         id,
-		fifos:      fifos,
-		stdioPipes: stdio,
-		closer:     closer,
+		id:     id,
+		fifos:  fifos,
+		stdios: stdio,
+		closer: closer,
+	}, nil
+}
+
+func NewVsockExecIO(id string, vsocks *VsockSet) (*ExecIO, error) {
+	ios, closer, err := newStdioVsock(vsocks)
+	if err != nil {
+		return nil, err
+	}
+	return &ExecIO{
+		id:     id,
+		vsocks: vsocks,
+		stdios: ios,
+		closer: closer,
 	}, nil
 }
 
 // Config returns io config.
 func (e *ExecIO) Config() cio.Config {
-	return e.fifos.Config
+	if e.fifos != nil {
+		return e.fifos.Config
+	} else {
+		return e.vsocks.config()
+	}
 }
 
 // Attach attaches exec stdio. The logic is similar with container io attach.

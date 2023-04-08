@@ -159,50 +159,6 @@ func (c *Controller) Start(ctx context.Context, id string) (cin sandbox.Controll
 		}
 	}()
 
-	// Create sandbox container root directories.
-	sandboxRootDir := c.getSandboxRootDir(id)
-	if err := c.os.MkdirAll(sandboxRootDir, 0755); err != nil {
-		return cin, fmt.Errorf("failed to create sandbox root directory %q: %w",
-			sandboxRootDir, err)
-	}
-	defer func() {
-		if retErr != nil && cleanupErr == nil {
-			// Cleanup the sandbox root directory.
-			if cleanupErr = c.os.RemoveAll(sandboxRootDir); cleanupErr != nil {
-				log.G(ctx).WithError(cleanupErr).Errorf("Failed to remove sandbox root directory %q",
-					sandboxRootDir)
-			}
-		}
-	}()
-
-	volatileSandboxRootDir := c.getVolatileSandboxRootDir(id)
-	if err := c.os.MkdirAll(volatileSandboxRootDir, 0755); err != nil {
-		return cin, fmt.Errorf("failed to create volatile sandbox root directory %q: %w",
-			volatileSandboxRootDir, err)
-	}
-	defer func() {
-		if retErr != nil && cleanupErr == nil {
-			// Cleanup the volatile sandbox root directory.
-			if cleanupErr = c.os.RemoveAll(volatileSandboxRootDir); cleanupErr != nil {
-				log.G(ctx).WithError(cleanupErr).Errorf("Failed to remove volatile sandbox root directory %q",
-					volatileSandboxRootDir)
-			}
-		}
-	}()
-
-	// Setup files required for the sandbox.
-	if err = c.setupSandboxFiles(id, config); err != nil {
-		return cin, fmt.Errorf("failed to setup sandbox files: %w", err)
-	}
-	defer func() {
-		if retErr != nil && cleanupErr == nil {
-			if cleanupErr = c.cleanupSandboxFiles(id, config); cleanupErr != nil {
-				log.G(ctx).WithError(cleanupErr).Errorf("Failed to cleanup sandbox files in %q",
-					sandboxRootDir)
-			}
-		}
-	}()
-
 	// Update sandbox created timestamp.
 	info, err := container.Info(ctx)
 	if err != nil {
@@ -267,7 +223,7 @@ func (c *Controller) Start(ctx context.Context, id string) (cin sandbox.Controll
 	return
 }
 
-func (c *Controller) Create(ctx context.Context, _id string, _ ...sandbox.CreateOpt) error {
+func (c *Controller) Create(ctx context.Context, _info sandbox.Sandbox, _ ...sandbox.CreateOpt) error {
 	// Not used by pod-sandbox implementation as there is no need to split pause containers logic.
 	return nil
 }

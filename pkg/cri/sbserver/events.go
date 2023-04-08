@@ -366,7 +366,7 @@ func (em *eventMonitor) handleEvent(any interface{}) error {
 func handleContainerExit(ctx context.Context, e *eventtypes.TaskExit, cntr containerstore.Container, sandboxID string, c *criService) error {
 	// Attach container IO so that `Delete` could cleanup the stream properly.
 	task, err := cntr.Container.Task(ctx,
-		func(*containerdio.FIFOSet) (containerdio.IO, error) {
+		func(config containerdio.Config) (containerdio.IO, error) {
 			// We can't directly return cntr.IO here, because
 			// even if cntr.IO is nil, the cio.IO interface
 			// is not.

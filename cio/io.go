@@ -69,7 +69,7 @@ type Creator func(id string) (IO, error)
 // There should only be one reader for a task's IO set
 // because fifo's can only be read from one reader or the output
 // will be sent only to the first reads
-type Attach func(*FIFOSet) (IO, error)
+type Attach func(config Config) (IO, error)
 
 // FIFOSet is a set of file paths to FIFOs for a task's standard IO streams
 type FIFOSet struct {
@@ -162,10 +162,8 @@ func NewAttach(opts ...Opt) Attach {
 	for _, opt := range opts {
 		opt(streams)
 	}
-	return func(fifos *FIFOSet) (IO, error) {
-		if fifos == nil {
-			return nil, fmt.Errorf("cannot attach, missing fifos")
-		}
+	return func(config Config) (IO, error) {
+		fifos := NewFIFOSetByConfig(config)
 		return copyIO(fifos, streams)
 	}
 }
@@ -353,10 +351,11 @@ func (l *logURI) Close() error {
 //
 // Allows io to be loaded on the task for deletion without
 // starting copy routines
-func Load(set *FIFOSet) (IO, error) {
+func Load(config Config) (IO, error) {
+	fifos := NewFIFOSetByConfig(config)
 	return &cio{
-		config:  set.Config,
-		closers: []io.Closer{set},
+		config:  config,
+		closers: []io.Closer{fifos},
 	}, nil
 }
 

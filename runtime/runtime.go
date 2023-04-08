@@ -49,8 +49,11 @@ type CreateOpts struct {
 	// Runtime name to use (e.g. `io.containerd.NAME.VERSION`).
 	// As an alternative full abs path to binary may be specified instead.
 	Runtime string
-	// SandboxID is an optional ID of sandbox this container belongs to
-	SandboxID string
+	// TaskAddress is an optional task address if the sandbox already served the task api
+	TaskAddress string
+	// TaskAddress is an optional bundle path
+	// if the sandbox already prepared the bundle for the task
+	Bundle string
 }
 
 // Exit information for a process

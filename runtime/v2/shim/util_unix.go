@@ -19,13 +19,17 @@
 package shim
 
 import (
+	"bufio"
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"io"
+	"math"
 	"net"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -33,11 +37,19 @@ import (
 	"github.com/containerd/containerd/defaults"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/sys"
+	"github.com/mdlayher/vsock"
 )
 
 const (
 	shimBinaryFormat = "containerd-shim-%s-%s"
 	socketPathLimit  = 106
+)
+
+const (
+	DefaultIO = ""
+	Pipe      = "pipe"
+	Vsock     = "vsock"
+	HVsock    = "hvsock"
 )
 
 func getSysProcAttr() *syscall.SysProcAttr {
@@ -76,6 +88,45 @@ func SocketAddress(ctx context.Context, socketPath, id string) (string, error) {
 
 // AnonDialer returns a dialer for a socket
 func AnonDialer(address string, timeout time.Duration) (net.Conn, error) {
+	if strings.HasPrefix(address, Vsock) {
+		address = strings.TrimPrefix(address, Vsock+"://")
+		cxport := strings.Split(address, ":")
+		if len(cxport) != 2 {
+			return nil, fmt.Errorf("invalid vsock address %s", address)
+		}
+		contextID, err := strconv.ParseUint(cxport[0], 10, 0)
+		if err != nil {
+			return nil, err
+		}
+		if contextID > math.MaxUint32 {
+			return nil, fmt.Errorf("vsock context id %d is invalid", contextID)
+		}
+		port, err := strconv.ParseUint(cxport[1], 10, 0)
+		if err != nil {
+			return nil, err
+		}
+		if port > math.MaxUint32 {
+			return nil, fmt.Errorf("vsock port %d is invalid", port)
+		}
+		return vsock.Dial(uint32(contextID), uint32(port), &vsock.Config{})
+	}
+
+	if strings.HasPrefix(address, HVsock) {
+		address = strings.TrimPrefix(address, HVsock+"://")
+		addrport := strings.Split(address, ":")
+		if len(addrport) != 2 {
+			return nil, fmt.Errorf("invalid vsock address %s", address)
+		}
+		addr := addrport[0]
+		port, err := strconv.ParseUint(addrport[1], 10, 0)
+		if err != nil {
+			return nil, err
+		}
+		if port > math.MaxUint32 {
+			return nil, fmt.Errorf("vsock port %d is invalid", port)
+		}
+		return HVSockDialer(addr, int(port), timeout)
+	}
 	return net.DialTimeout("unix", socket(address).path(), timeout)
 }
 
@@ -176,4 +227,49 @@ func CanConnect(address string) bool {
 	}
 	conn.Close()
 	return true
+}
+
+func HVSockDialer(addr string, port int, timeout time.Duration) (net.Conn, error) {
+	timeoutCh := time.After(timeout)
+	for {
+		conn, err := net.DialTimeout("unix", addr, timeout)
+		if err != nil {
+			return nil, err
+		}
+		if _, err = conn.Write([]byte(fmt.Sprintf("CONNECT %d\n", port))); err != nil {
+			conn.Close()
+			return nil, err
+		}
+		errChan := make(chan error)
+		go func() {
+			reader := bufio.NewReader(conn)
+			response, err := reader.ReadString('\n')
+			if err != nil {
+				errChan <- err
+				return
+			}
+			if strings.Contains(response, "OK") {
+				errChan <- nil
+			} else {
+				errChan <- fmt.Errorf("hybrid vsock handshake response error: %s", response)
+			}
+		}()
+		select {
+		case err = <-errChan:
+			if err != nil {
+				conn.Close()
+				// when it is EOF, maybe the server side is not ready.
+				if err == io.EOF {
+					time.Sleep(10 * time.Millisecond)
+					continue
+				}
+				return nil, err
+			}
+			return conn, nil
+		case <-timeoutCh:
+			conn.Close()
+			return nil, fmt.Errorf("timeout waiting for hybrid vsocket handshake of %s:%d", addr, port)
+		}
+	}
+
 }

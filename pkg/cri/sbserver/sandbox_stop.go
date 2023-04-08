@@ -64,6 +64,10 @@ func (c *criService) stopPodSandbox(ctx context.Context, sandbox sandboxstore.Sa
 		}
 	}
 
+	if err := c.cleanupSandboxFiles(id, sandbox.Config); err != nil {
+		return fmt.Errorf("failed to cleanup sandbox files: %w", err)
+	}
+
 	// Only stop sandbox container when it's running or unknown.
 	state := sandbox.Status.Get().State
 	if state == sandboxstore.StateReady || state == sandboxstore.StateUnknown {

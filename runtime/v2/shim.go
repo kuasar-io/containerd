@@ -126,22 +126,13 @@ func loadShim(ctx context.Context, bundle *Bundle, onClose func()) (_ ShimInstan
 	}()
 
 	shim := &shim{
-		bundle: bundle,
-		client: conn,
+		bundle:  bundle,
+		client:  conn,
+		address: params.Address,
 	}
 
 	ctx, cancel := timeout.WithContext(ctx, loadTimeout)
 	defer cancel()
-
-	// Check connectivity, TaskService is the only required service, so create a temp one to check connection.
-	s, err := newShimTask(shim)
-	if err != nil {
-		return nil, err
-	}
-
-	if _, err := s.PID(ctx); err != nil {
-		return nil, err
-	}
 
 	return shim, nil
 }
@@ -204,6 +195,8 @@ type ShimInstance interface {
 	// Client returns the underlying TTRPC or GRPC client object for this shim.
 	// The underlying object can be either *ttrpc.Client or grpc.ClientConnInterface.
 	Client() any
+	// Address returns the address of Task API server
+	Address() string
 	// Delete will close the client and remove bundle from disk.
 	Delete(ctx context.Context) error
 }
@@ -317,8 +310,9 @@ func (gc *grpcConn) UserOnCloseWait(ctx context.Context) error {
 }
 
 type shim struct {
-	bundle *Bundle
-	client any
+	bundle  *Bundle
+	client  any
+	address string
 }
 
 var _ ShimInstance = (*shim)(nil)
@@ -338,6 +332,10 @@ func (s *shim) Bundle() string {
 
 func (s *shim) Client() any {
 	return s.client
+}
+
+func (s *shim) Address() string {
+	return s.address
 }
 
 // Close closes the underlying client connection.

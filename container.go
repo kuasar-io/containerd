@@ -20,8 +20,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/containerd/containerd/api/services/tasks/v1"
@@ -34,7 +32,7 @@ import (
 	"github.com/containerd/containerd/oci"
 	"github.com/containerd/containerd/protobuf"
 	"github.com/containerd/containerd/runtime/v2/runc/options"
-	"github.com/containerd/fifo"
+	"github.com/containerd/containerd/sandbox"
 	"github.com/containerd/typeurl/v2"
 	ver "github.com/opencontainers/image-spec/specs-go"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -263,6 +261,31 @@ func (c *container) NewTask(ctx context.Context, ioCreate cio.Creator, opts ...N
 			})
 		}
 	}
+	if r.SandboxID != "" {
+		sb, err := c.client.LoadSandbox(ctx, r.SandboxID)
+		if err != nil {
+			return nil, err
+		}
+		status, err := sb.Status(ctx, false)
+		// TODO determine if sandbox is ready
+		if err != nil {
+			return nil, err
+		}
+		res, err := sb.Prepare(ctx, func(opts *sandbox.PrepareOptions) {
+			opts.Spec = r.Spec
+			opts.ContainerID = r.ID
+			opts.Stdin = cfg.Stdin
+			opts.Stdout = cfg.Stdout
+			opts.Stderr = cfg.Stderr
+			opts.Terminal = cfg.Terminal
+			opts.Rootfs = request.Rootfs
+		})
+		if err != nil {
+			return nil, err
+		}
+		request.TaskAddress = status.TaskAddress
+		request.Bundle = res.Bundle
+	}
 	info := TaskInfo{
 		runtime: r.Runtime.Name,
 	}
@@ -421,43 +444,16 @@ func (c *container) get(ctx context.Context) (containers.Container, error) {
 
 // get the existing fifo paths from the task information stored by the daemon
 func attachExistingIO(response *tasks.GetResponse, ioAttach cio.Attach) (cio.IO, error) {
-	fifoSet := loadFifos(response)
-	return ioAttach(fifoSet)
+	ioConfig := loadIoConfig(response)
+	return ioAttach(ioConfig)
 }
 
-// loadFifos loads the containers fifos
-func loadFifos(response *tasks.GetResponse) *cio.FIFOSet {
-	fifos := []string{
-		response.Process.Stdin,
-		response.Process.Stdout,
-		response.Process.Stderr,
-	}
-	closer := func() error {
-		var (
-			err  error
-			dirs = map[string]struct{}{}
-		)
-		for _, f := range fifos {
-			if isFifo, _ := fifo.IsFifo(f); isFifo {
-				if rerr := os.Remove(f); err == nil {
-					err = rerr
-				}
-				dirs[filepath.Dir(f)] = struct{}{}
-			}
-		}
-		for dir := range dirs {
-			// we ignore errors here because we don't
-			// want to remove the directory if it isn't
-			// empty
-			os.Remove(dir)
-		}
-		return err
-	}
-
-	return cio.NewFIFOSet(cio.Config{
+// loadIoConfig loads the containers fifos
+func loadIoConfig(response *tasks.GetResponse) cio.Config {
+	return cio.Config{
 		Stdin:    response.Process.Stdin,
 		Stdout:   response.Process.Stdout,
 		Stderr:   response.Process.Stderr,
 		Terminal: response.Process.Terminal,
-	}, closer)
+	}
 }

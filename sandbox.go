@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/containerd/containerd/containers"
+	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/oci"
 	"github.com/containerd/containerd/protobuf/types"
 	api "github.com/containerd/containerd/sandbox"
@@ -34,44 +35,62 @@ type Sandbox interface {
 	// ID is a sandbox identifier
 	ID() string
 	// PID returns sandbox's process PID or error if its not yet started.
-	PID() (uint32, error)
-	// NewContainer creates new container that will belong to this sandbox
-	NewContainer(ctx context.Context, id string, opts ...NewContainerOpts) (Container, error)
+	PID(ctx context.Context) (uint32, error)
+	// Info returns sandbox metadata
+	Info() api.Sandbox
 	// Labels returns the labels set on the sandbox
 	Labels(ctx context.Context) (map[string]string, error)
 	// Start starts new sandbox instance
 	Start(ctx context.Context) error
 	// Stop sends stop request to the shim instance.
 	Stop(ctx context.Context) error
+	// Prepare will let the sandbox to prepare the container resources
+	// and returns the bundle for the container
+	Prepare(ctx context.Context, opts ...api.PrepareOpt) (api.PrepareResult, error)
+	// Purge will purge the resources related to the container or exec process in the sandbox.
+	Purge(ctx context.Context, containerID string, execID string) error
+	// UpdateResources updates the resources that the sandbox is managing
+	UpdateResources(ctx context.Context, opts ...api.UpdateResourceOpt) error
+	// Status get the sandbox status
+	Status(ctx context.Context, verbose bool) (api.ControllerStatus, error)
 	// Wait blocks until sandbox process exits.
 	Wait(ctx context.Context) (<-chan ExitStatus, error)
 	// Shutdown removes sandbox from the metadata store and shutdowns shim instance.
 	Shutdown(ctx context.Context) error
 }
 
-type sandboxClient struct {
-	pid      *uint32
+type sandboxInstance struct {
 	client   *Client
 	metadata api.Sandbox
 }
 
-func (s *sandboxClient) ID() string {
+func sandboxFromRecord(client *Client, s api.Sandbox) *sandboxInstance {
+	return &sandboxInstance{
+		client:   client,
+		metadata: s,
+	}
+}
+
+func (s *sandboxInstance) ID() string {
 	return s.metadata.ID
 }
 
-func (s *sandboxClient) PID() (uint32, error) {
-	if s.pid == nil {
+func (s *sandboxInstance) PID(ctx context.Context) (uint32, error) {
+	resp, err := s.client.SandboxController(s.metadata.Sandboxer).Status(ctx, s.ID(), false)
+	if err != nil {
+		return 0, err
+	}
+	if resp.State != api.StateReady {
 		return 0, fmt.Errorf("sandbox not started")
 	}
-
-	return *s.pid, nil
+	return resp.Pid, nil
 }
 
-func (s *sandboxClient) NewContainer(ctx context.Context, id string, opts ...NewContainerOpts) (Container, error) {
-	return s.client.NewContainer(ctx, id, append(opts, WithSandbox(s.ID()))...)
+func (s *sandboxInstance) Info() api.Sandbox {
+	return s.metadata
 }
 
-func (s *sandboxClient) Labels(ctx context.Context) (map[string]string, error) {
+func (s *sandboxInstance) Labels(ctx context.Context) (map[string]string, error) {
 	sandbox, err := s.client.SandboxStore().Get(ctx, s.ID())
 	if err != nil {
 		return nil, err
@@ -80,22 +99,21 @@ func (s *sandboxClient) Labels(ctx context.Context) (map[string]string, error) {
 	return sandbox.Labels, nil
 }
 
-func (s *sandboxClient) Start(ctx context.Context) error {
-	resp, err := s.client.SandboxController().Start(ctx, s.ID())
+func (s *sandboxInstance) Start(ctx context.Context) error {
+	_, err := s.client.SandboxController(s.metadata.Sandboxer).Start(ctx, s.ID())
 	if err != nil {
 		return err
 	}
 
-	s.pid = &resp.Pid
 	return nil
 }
 
-func (s *sandboxClient) Wait(ctx context.Context) (<-chan ExitStatus, error) {
+func (s *sandboxInstance) Wait(ctx context.Context) (<-chan ExitStatus, error) {
 	c := make(chan ExitStatus, 1)
 	go func() {
 		defer close(c)
 
-		exitStatus, err := s.client.SandboxController().Wait(ctx, s.ID())
+		exitStatus, err := s.client.SandboxController(s.metadata.Sandboxer).Wait(ctx, s.ID())
 		if err != nil {
 			c <- ExitStatus{
 				code: UnknownExitStatus,
@@ -113,12 +131,16 @@ func (s *sandboxClient) Wait(ctx context.Context) (<-chan ExitStatus, error) {
 	return c, nil
 }
 
-func (s *sandboxClient) Stop(ctx context.Context) error {
-	return s.client.SandboxController().Stop(ctx, s.ID())
+func (s *sandboxInstance) Stop(ctx context.Context) error {
+	return s.client.SandboxController(s.metadata.Sandboxer).Stop(ctx, s.ID())
 }
 
-func (s *sandboxClient) Shutdown(ctx context.Context) error {
-	if err := s.client.SandboxController().Shutdown(ctx, s.ID()); err != nil {
+func (s *sandboxInstance) Status(ctx context.Context, verbose bool) (api.ControllerStatus, error) {
+	return s.client.SandboxController(s.metadata.Sandboxer).Status(ctx, s.ID(), verbose)
+}
+
+func (s *sandboxInstance) Shutdown(ctx context.Context) error {
+	if err := s.client.SandboxController(s.metadata.Sandboxer).Shutdown(ctx, s.ID()); err != nil && !errdefs.IsNotFound(err) {
 		return fmt.Errorf("failed to shutdown sandbox: %w", err)
 	}
 
@@ -127,6 +149,18 @@ func (s *sandboxClient) Shutdown(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (s *sandboxInstance) Prepare(ctx context.Context, opts ...api.PrepareOpt) (api.PrepareResult, error) {
+	return s.client.SandboxController(s.metadata.Sandboxer).Prepare(ctx, s.ID(), opts...)
+}
+
+func (s *sandboxInstance) Purge(ctx context.Context, containerID string, execID string) error {
+	return s.client.SandboxController(s.metadata.Sandboxer).Purge(ctx, s.ID(), containerID, execID)
+}
+
+func (s *sandboxInstance) UpdateResources(ctx context.Context, opts ...api.UpdateResourceOpt) error {
+	return s.client.SandboxController(s.metadata.Sandboxer).UpdateResources(ctx, s.ID(), opts...)
 }
 
 // NewSandbox creates new sandbox client
@@ -152,8 +186,7 @@ func (c *Client) NewSandbox(ctx context.Context, sandboxID string, opts ...NewSa
 		return nil, err
 	}
 
-	return &sandboxClient{
-		pid:      nil, // Not yet started
+	return &sandboxInstance{
 		client:   c,
 		metadata: metadata,
 	}, nil
@@ -166,13 +199,7 @@ func (c *Client) LoadSandbox(ctx context.Context, id string) (Sandbox, error) {
 		return nil, err
 	}
 
-	status, err := c.SandboxController().Status(ctx, id, false)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load sandbox %s, status request failed: %w", id, err)
-	}
-
-	return &sandboxClient{
-		pid:      &status.Pid,
+	return &sandboxInstance{
 		client:   c,
 		metadata: sandbox,
 	}, nil

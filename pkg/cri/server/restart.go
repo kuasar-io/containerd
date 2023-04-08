@@ -200,7 +200,7 @@ func (c *criService) loadContainer(ctx context.Context, cntr containerd.Containe
 	var containerIO *cio.ContainerIO
 	err = func() error {
 		// Load up-to-date status from containerd.
-		t, err := cntr.Task(ctx, func(fifos *containerdio.FIFOSet) (_ containerdio.IO, err error) {
+		t, err := cntr.Task(ctx, func(config containerdio.Config) (_ containerdio.IO, err error) {
 			stdoutWC, stderrWC, err := c.createContainerLoggers(meta.LogPath, meta.Config.GetTty())
 			if err != nil {
 				return nil, err
@@ -216,7 +216,7 @@ func (c *criService) loadContainer(ctx context.Context, cntr containerd.Containe
 				}
 			}()
 			containerIO, err = cio.NewContainerIO(id,
-				cio.WithFIFOs(fifos),
+				cio.WithFIFOConfig(config),
 			)
 			if err != nil {
 				return nil, err

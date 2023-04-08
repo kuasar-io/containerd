@@ -24,6 +24,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/containerd/containerd/runtime/v2/shim"
 	"github.com/containerd/typeurl/v2"
 	"github.com/davecgh/go-spew/spew"
 	imagespec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -60,11 +61,9 @@ func (c *criService) CreateContainer(ctx context.Context, r *runtime.CreateConta
 	if err != nil {
 		return nil, fmt.Errorf("failed to find sandbox id %q: %w", r.GetPodSandboxId(), err)
 	}
+	sandboxInfo := sandbox.SandboxInstance.Info()
 
-	controller, err := c.getSandboxController(sandbox.Config, sandbox.RuntimeHandler)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get sandbox controller: %w", err)
-	}
+	controller := c.client.SandboxController(sandboxInfo.Sandboxer)
 
 	cstatus, err := controller.Status(ctx, sandbox.ID, false)
 	if err != nil {
@@ -240,9 +239,22 @@ func (c *criService) CreateContainer(ctx context.Context, r *runtime.CreateConta
 		log.G(ctx).Infof("Logging will be disabled due to empty log paths for sandbox (%q) or container (%q)",
 			sandboxConfig.GetLogDirectory(), config.GetLogPath())
 	}
-
-	containerIO, err := cio.NewContainerIO(id,
-		cio.WithNewFIFOs(volatileContainerRootDir, config.GetTty(), config.GetStdin()))
+	var ioOpts []cio.ContainerIOOpts
+	switch ociRuntime.IoType {
+	case shim.DefaultIO, shim.Pipe:
+		log.G(ctx).Debugf("create named pipe io for container %s", meta.ID)
+		ioOpts = append(ioOpts, cio.WithNewFIFOs(volatileContainerRootDir, config.GetTty(), config.GetStdin()))
+	case shim.Vsock, shim.HVsock:
+		log.G(ctx).Debugf("create %s io for container %s", ociRuntime.IoType, meta.ID)
+		vsockIo, err := c.allocateVsockIo(ctx, sandbox, ociRuntime.IoType, config.GetStdin(), config.GetTty())
+		if err != nil {
+			return nil, fmt.Errorf("failed to allocate vsock io ports in sandbox %q: %w", id, err)
+		}
+		ioOpts = append(ioOpts, cio.WithVSockIo(vsockIo))
+	default:
+		return nil, fmt.Errorf("io_type only support [\"pipe\", \"vsock\", \"hvsock\"")
+	}
+	containerIO, err := cio.NewContainerIO(id, ioOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create container io: %w", err)
 	}
@@ -261,11 +273,6 @@ func (c *criService) CreateContainer(ctx context.Context, r *runtime.CreateConta
 
 	containerLabels := buildLabels(config.Labels, image.ImageSpec.Config.Labels, containerKindContainer)
 
-	sandboxInfo, err := c.client.SandboxStore().Get(ctx, sandboxID)
-	if err != nil {
-		return nil, fmt.Errorf("unable to get sandbox %q metdata: %w", sandboxID, err)
-	}
-
 	opts = append(opts,
 		containerd.WithSpec(spec, specOpts...),
 		containerd.WithRuntime(sandboxInfo.Runtime.Name, sandboxInfo.Runtime.Options),
@@ -273,10 +280,7 @@ func (c *criService) CreateContainer(ctx context.Context, r *runtime.CreateConta
 		containerd.WithContainerExtension(containerMetadataExtension, &meta),
 	)
 
-	// When using sandboxed shims, containerd's runtime needs to know which sandbox shim instance to use.
-	if ociRuntime.SandboxMode == string(criconfig.ModeShim) {
-		opts = append(opts, containerd.WithSandbox(sandboxID))
-	}
+	opts = append(opts, containerd.WithSandbox(sandboxID))
 
 	opts = append(opts, c.nri.WithContainerAdjustment())
 	defer func() {

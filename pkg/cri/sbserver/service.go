@@ -85,9 +85,6 @@ type criService struct {
 	sandboxNameIndex *registrar.Registrar
 	// containerStore stores all resources associated with containers.
 	containerStore *containerstore.Store
-	// sandboxControllers contains different sandbox controller type,
-	// every controller controls sandbox lifecycle (and hides implementation details behind).
-	sandboxControllers map[criconfig.SandboxControllerMode]sandbox.Controller
 	// containerNameIndex stores all container names and make sure each
 	// name is unique.
 	containerNameIndex *registrar.Registrar
@@ -142,7 +139,6 @@ func NewCRIService(config criconfig.Config, client *containerd.Client, nri *nri.
 		initialized:                 atomic.NewBool(false),
 		netPlugin:                   make(map[string]cni.CNI),
 		unpackDuplicationSuppressor: kmutex.New(),
-		sandboxControllers:          make(map[criconfig.SandboxControllerMode]sandbox.Controller),
 	}
 
 	// TODO: figure out a proper channel size.
@@ -190,9 +186,8 @@ func NewCRIService(config criconfig.Config, client *containerd.Client, nri *nri.
 		return nil, err
 	}
 
-	// Load all sandbox controllers(pod sandbox controller and remote shim controller)
-	c.sandboxControllers[criconfig.ModePodSandbox] = podsandbox.New(config, client, c.sandboxStore, c.os, c, c.baseOCISpecs)
-	c.sandboxControllers[criconfig.ModeShim] = client.SandboxController()
+	// init the global podsandbox controller
+	podsandbox.Init(config, client, c.sandboxStore, c.os, c, c.baseOCISpecs)
 
 	c.nri = nri
 
@@ -349,6 +344,17 @@ func (c *criService) register(s *grpc.Server) error {
 	return nil
 }
 
+// getSandboxController returns the sandbox controller configuration for sandbox.
+// If absent in legacy case, it will return the default controller.
+func (c *criService) getSandboxController(config *runtime.PodSandboxConfig, runtimeHandler string) (sandbox.Controller, error) {
+	ociRuntime, err := c.getSandboxRuntime(config, runtimeHandler)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get sandbox runtime: %w", err)
+	}
+
+	return c.client.SandboxController(ociRuntime.Sandboxer), nil
+}
+
 // imageFSPath returns containerd image filesystem path.
 // Note that if containerd changes directory layout, we also needs to change this.
 func imageFSPath(rootDir, snapshotter string) string {
@@ -391,17 +397,4 @@ func loadBaseOCISpecs(config *criconfig.Config) (map[string]*oci.Spec, error) {
 	}
 
 	return specs, nil
-}
-
-// ValidateMode validate the given mod value,
-// returns err if mod is empty or unknown
-func ValidateMode(modeStr string) error {
-	switch modeStr {
-	case string(criconfig.ModePodSandbox), string(criconfig.ModeShim):
-		return nil
-	case "":
-		return fmt.Errorf("empty sandbox controller mode")
-	default:
-		return fmt.Errorf("unknown sandbox controller mode: %s", modeStr)
-	}
 }

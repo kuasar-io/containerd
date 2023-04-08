@@ -53,12 +53,12 @@ func TestValidateConfig(t *testing.T) {
 					},
 					Runtimes: map[string]Runtime{
 						RuntimeUntrusted: {
-							Type:        "untrusted",
-							SandboxMode: string(ModePodSandbox),
+							Type:      "untrusted",
+							Sandboxer: string(ModePodSandbox),
 						},
 						RuntimeDefault: {
-							Type:        "default",
-							SandboxMode: string(ModePodSandbox),
+							Type:      "default",
+							Sandboxer: string(ModePodSandbox),
 						},
 					},
 				},
@@ -99,8 +99,8 @@ func TestValidateConfig(t *testing.T) {
 					DefaultRuntimeName: RuntimeDefault,
 					Runtimes: map[string]Runtime{
 						RuntimeDefault: {
-							Type:        "default",
-							SandboxMode: string(ModePodSandbox),
+							Type:      "default",
+							Sandboxer: string(ModePodSandbox),
 						},
 					},
 				},
@@ -136,8 +136,8 @@ func TestValidateConfig(t *testing.T) {
 					DefaultRuntimeName: RuntimeDefault,
 					Runtimes: map[string]Runtime{
 						RuntimeDefault: {
-							Type:        plugin.RuntimeLinuxV1,
-							SandboxMode: string(ModePodSandbox),
+							Type:      plugin.RuntimeLinuxV1,
+							Sandboxer: string(ModePodSandbox),
 						},
 					},
 				},
@@ -175,8 +175,8 @@ func TestValidateConfig(t *testing.T) {
 					DefaultRuntimeName: RuntimeDefault,
 					Runtimes: map[string]Runtime{
 						RuntimeDefault: {
-							Type:        plugin.RuntimeLinuxV1,
-							SandboxMode: string(ModePodSandbox),
+							Type:      plugin.RuntimeLinuxV1,
+							Sandboxer: string(ModePodSandbox),
 						},
 					},
 				},
@@ -213,9 +213,9 @@ func TestValidateConfig(t *testing.T) {
 					DefaultRuntimeName: RuntimeDefault,
 					Runtimes: map[string]Runtime{
 						RuntimeDefault: {
-							Engine:      "runc",
-							Type:        plugin.RuntimeLinuxV1,
-							SandboxMode: string(ModePodSandbox),
+							Engine:    "runc",
+							Type:      plugin.RuntimeLinuxV1,
+							Sandboxer: string(ModePodSandbox),
 						},
 					},
 				},
@@ -252,9 +252,9 @@ func TestValidateConfig(t *testing.T) {
 					DefaultRuntimeName: RuntimeDefault,
 					Runtimes: map[string]Runtime{
 						RuntimeDefault: {
-							Root:        "/run/containerd/runc",
-							Type:        plugin.RuntimeLinuxV1,
-							SandboxMode: string(ModePodSandbox),
+							Root:      "/run/containerd/runc",
+							Type:      plugin.RuntimeLinuxV1,
+							Sandboxer: string(ModePodSandbox),
 						},
 					},
 				},
@@ -295,8 +295,8 @@ func TestValidateConfig(t *testing.T) {
 					DefaultRuntimeName: RuntimeDefault,
 					Runtimes: map[string]Runtime{
 						RuntimeDefault: {
-							Type:        plugin.RuntimeRuncV1,
-							SandboxMode: string(ModePodSandbox),
+							Type:      plugin.RuntimeRuncV1,
+							Sandboxer: string(ModePodSandbox),
 						},
 					},
 				},

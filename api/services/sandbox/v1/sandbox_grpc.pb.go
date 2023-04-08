@@ -255,6 +255,9 @@ type ControllerClient interface {
 	Create(ctx context.Context, in *ControllerCreateRequest, opts ...grpc.CallOption) (*ControllerCreateResponse, error)
 	Start(ctx context.Context, in *ControllerStartRequest, opts ...grpc.CallOption) (*ControllerStartResponse, error)
 	Platform(ctx context.Context, in *ControllerPlatformRequest, opts ...grpc.CallOption) (*ControllerPlatformResponse, error)
+	Prepare(ctx context.Context, in *PrepareRequest, opts ...grpc.CallOption) (*PrepareResponse, error)
+	Purge(ctx context.Context, in *PurgeRequest, opts ...grpc.CallOption) (*PurgeResponse, error)
+	UpdateResources(ctx context.Context, in *UpdateResourcesRequest, opts ...grpc.CallOption) (*UpdateResourcesResponse, error)
 	Stop(ctx context.Context, in *ControllerStopRequest, opts ...grpc.CallOption) (*ControllerStopResponse, error)
 	Wait(ctx context.Context, in *ControllerWaitRequest, opts ...grpc.CallOption) (*ControllerWaitResponse, error)
 	Status(ctx context.Context, in *ControllerStatusRequest, opts ...grpc.CallOption) (*ControllerStatusResponse, error)
@@ -290,6 +293,33 @@ func (c *controllerClient) Start(ctx context.Context, in *ControllerStartRequest
 func (c *controllerClient) Platform(ctx context.Context, in *ControllerPlatformRequest, opts ...grpc.CallOption) (*ControllerPlatformResponse, error) {
 	out := new(ControllerPlatformResponse)
 	err := c.cc.Invoke(ctx, "/containerd.services.sandbox.v1.Controller/Platform", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *controllerClient) Prepare(ctx context.Context, in *PrepareRequest, opts ...grpc.CallOption) (*PrepareResponse, error) {
+	out := new(PrepareResponse)
+	err := c.cc.Invoke(ctx, "/containerd.services.sandbox.v1.Controller/Prepare", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *controllerClient) Purge(ctx context.Context, in *PurgeRequest, opts ...grpc.CallOption) (*PurgeResponse, error) {
+	out := new(PurgeResponse)
+	err := c.cc.Invoke(ctx, "/containerd.services.sandbox.v1.Controller/Purge", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *controllerClient) UpdateResources(ctx context.Context, in *UpdateResourcesRequest, opts ...grpc.CallOption) (*UpdateResourcesResponse, error) {
+	out := new(UpdateResourcesResponse)
+	err := c.cc.Invoke(ctx, "/containerd.services.sandbox.v1.Controller/UpdateResources", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -339,6 +369,9 @@ type ControllerServer interface {
 	Create(context.Context, *ControllerCreateRequest) (*ControllerCreateResponse, error)
 	Start(context.Context, *ControllerStartRequest) (*ControllerStartResponse, error)
 	Platform(context.Context, *ControllerPlatformRequest) (*ControllerPlatformResponse, error)
+	Prepare(context.Context, *PrepareRequest) (*PrepareResponse, error)
+	Purge(context.Context, *PurgeRequest) (*PurgeResponse, error)
+	UpdateResources(context.Context, *UpdateResourcesRequest) (*UpdateResourcesResponse, error)
 	Stop(context.Context, *ControllerStopRequest) (*ControllerStopResponse, error)
 	Wait(context.Context, *ControllerWaitRequest) (*ControllerWaitResponse, error)
 	Status(context.Context, *ControllerStatusRequest) (*ControllerStatusResponse, error)
@@ -358,6 +391,15 @@ func (UnimplementedControllerServer) Start(context.Context, *ControllerStartRequ
 }
 func (UnimplementedControllerServer) Platform(context.Context, *ControllerPlatformRequest) (*ControllerPlatformResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Platform not implemented")
+}
+func (UnimplementedControllerServer) Prepare(context.Context, *PrepareRequest) (*PrepareResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Prepare not implemented")
+}
+func (UnimplementedControllerServer) Purge(context.Context, *PurgeRequest) (*PurgeResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Purge not implemented")
+}
+func (UnimplementedControllerServer) UpdateResources(context.Context, *UpdateResourcesRequest) (*UpdateResourcesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateResources not implemented")
 }
 func (UnimplementedControllerServer) Stop(context.Context, *ControllerStopRequest) (*ControllerStopResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Stop not implemented")
@@ -434,6 +476,60 @@ func _Controller_Platform_Handler(srv interface{}, ctx context.Context, dec func
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ControllerServer).Platform(ctx, req.(*ControllerPlatformRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Controller_Prepare_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PrepareRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ControllerServer).Prepare(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/containerd.services.sandbox.v1.Controller/Prepare",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ControllerServer).Prepare(ctx, req.(*PrepareRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Controller_Purge_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PurgeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ControllerServer).Purge(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/containerd.services.sandbox.v1.Controller/Purge",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ControllerServer).Purge(ctx, req.(*PurgeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Controller_UpdateResources_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateResourcesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ControllerServer).UpdateResources(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/containerd.services.sandbox.v1.Controller/UpdateResources",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ControllerServer).UpdateResources(ctx, req.(*UpdateResourcesRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -528,6 +624,18 @@ var Controller_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Platform",
 			Handler:    _Controller_Platform_Handler,
+		},
+		{
+			MethodName: "Prepare",
+			Handler:    _Controller_Prepare_Handler,
+		},
+		{
+			MethodName: "Purge",
+			Handler:    _Controller_Purge_Handler,
+		},
+		{
+			MethodName: "UpdateResources",
+			Handler:    _Controller_UpdateResources_Handler,
 		},
 		{
 			MethodName: "Stop",

@@ -18,10 +18,10 @@ package proxy
 
 import (
 	"context"
-
 	api "github.com/containerd/containerd/api/services/sandbox/v1"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/platforms"
+	"github.com/containerd/containerd/protobuf"
 	"github.com/containerd/containerd/sandbox"
 	"google.golang.org/protobuf/types/known/anypb"
 )
@@ -38,13 +38,13 @@ func NewSandboxController(client api.ControllerClient) sandbox.Controller {
 	return &remoteSandboxController{client: client}
 }
 
-func (s *remoteSandboxController) Create(ctx context.Context, sandboxID string, opts ...sandbox.CreateOpt) error {
+func (s *remoteSandboxController) Create(ctx context.Context, sandboxInfo sandbox.Sandbox, opts ...sandbox.CreateOpt) error {
 	var options sandbox.CreateOptions
 	for _, opt := range opts {
 		opt(&options)
 	}
 	_, err := s.client.Create(ctx, &api.ControllerCreateRequest{
-		SandboxID: sandboxID,
+		SandboxID: sandboxInfo.ID,
 		Rootfs:    options.Rootfs,
 		Options: &anypb.Any{
 			TypeUrl: options.Options.GetTypeUrl(),
@@ -131,12 +131,68 @@ func (s *remoteSandboxController) Status(ctx context.Context, sandboxID string, 
 		return sandbox.ControllerStatus{}, errdefs.FromGRPC(err)
 	}
 	return sandbox.ControllerStatus{
-		SandboxID: sandboxID,
-		Pid:       resp.GetPid(),
-		State:     resp.GetState(),
-		Info:      resp.GetInfo(),
-		CreatedAt: resp.GetCreatedAt().AsTime(),
-		ExitedAt:  resp.GetExitedAt().AsTime(),
-		Extra:     resp.GetExtra(),
+		SandboxID:   sandboxID,
+		Pid:         resp.GetPid(),
+		State:       resp.GetState(),
+		Info:        resp.GetInfo(),
+		TaskAddress: resp.GetTaskAddress(),
+		CreatedAt:   resp.GetCreatedAt().AsTime(),
+		ExitedAt:    resp.GetExitedAt().AsTime(),
+		Extra:       resp.GetExtra(),
 	}, nil
+}
+
+func (s *remoteSandboxController) Prepare(ctx context.Context, sandboxID string, opts ...sandbox.PrepareOpt) (sandbox.PrepareResult, error) {
+	var options sandbox.PrepareOptions
+	for _, opt := range opts {
+		opt(&options)
+	}
+
+	resp, err := s.client.Prepare(ctx, &api.PrepareRequest{
+		SandboxID:   sandboxID,
+		ContainerID: options.ContainerID,
+		ExecID:      options.ExecID,
+		Spec:        protobuf.FromAny(options.Spec),
+		Rootfs:      options.Rootfs,
+		Stdin:       options.Stdin,
+		Stdout:      options.Stdout,
+		Stderr:      options.Stderr,
+		Terminal:    options.Terminal,
+	})
+	if err != nil {
+		return sandbox.PrepareResult{}, errdefs.FromGRPC(err)
+	}
+	return sandbox.PrepareResult{
+		Bundle: resp.Bundle,
+	}, nil
+}
+
+func (s *remoteSandboxController) Purge(ctx context.Context, sandboxID string, containerID string, execID string) error {
+	_, err := s.client.Purge(ctx, &api.PurgeRequest{
+		SandboxID:   sandboxID,
+		ContainerID: containerID,
+		ExecID:      execID,
+	})
+	if err != nil {
+		return errdefs.FromGRPC(err)
+	}
+	return nil
+}
+
+func (s *remoteSandboxController) UpdateResources(ctx context.Context, sandboxID string, opts ...sandbox.UpdateResourceOpt) error {
+	var options sandbox.UpdateResourceOptions
+	for _, opt := range opts {
+		opt(&options)
+	}
+
+	_, err := s.client.UpdateResources(ctx, &api.UpdateResourcesRequest{
+		SandboxID:   sandboxID,
+		ContainerID: options.ContainerID,
+		Resources:   protobuf.FromAny(options.Resources),
+		Annotations: options.Annotations,
+	})
+	if err != nil {
+		return errdefs.FromGRPC(err)
+	}
+	return nil
 }

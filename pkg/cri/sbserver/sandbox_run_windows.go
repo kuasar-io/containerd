@@ -24,3 +24,13 @@ import (
 func (c *criService) taskOpts(runtimeType string) []containerd.NewTaskOpts {
 	return nil
 }
+
+// No sandbox files needed for windows.
+func (c *Controller) setupSandboxFiles(id string, config *runtime.PodSandboxConfig) error {
+	return nil
+}
+
+// No sandbox files needed for windows.
+func (c *Controller) cleanupSandboxFiles(id string, config *runtime.PodSandboxConfig) error {
+	return nil
+}

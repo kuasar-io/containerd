@@ -43,6 +43,7 @@ import (
 	"github.com/containerd/containerd/rootfs"
 	"github.com/containerd/containerd/runtime/linux/runctypes"
 	"github.com/containerd/containerd/runtime/v2/runc/options"
+	"github.com/containerd/containerd/sandbox"
 	"github.com/containerd/typeurl/v2"
 	digest "github.com/opencontainers/go-digest"
 	is "github.com/opencontainers/image-spec/specs-go"
@@ -352,11 +353,34 @@ func (t *task) Exec(ctx context.Context, id string, spec *specs.Process, ioCreat
 			i.Close()
 		}
 	}()
+
 	any, err := protobuf.MarshalAnyToProto(spec)
 	if err != nil {
 		return nil, err
 	}
 	cfg := i.Config()
+
+	cont, err := t.client.ContainerService().Get(ctx, t.id)
+	if err != nil {
+		return nil, err
+	}
+	if cont.SandboxID != "" {
+		sb, err := t.client.LoadSandbox(ctx, cont.SandboxID)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := sb.Prepare(ctx, func(prepareOptions *sandbox.PrepareOptions) {
+			prepareOptions.ContainerID = cont.ID
+			prepareOptions.ExecID = id
+			prepareOptions.Stdin = cfg.Stdin
+			prepareOptions.Stdout = cfg.Stdout
+			prepareOptions.Stderr = cfg.Stderr
+			prepareOptions.Terminal = cfg.Terminal
+			prepareOptions.Spec = any
+		}); err != nil {
+			return nil, err
+		}
+	}
 	request := &tasks.ExecProcessRequest{
 		ContainerID: t.id,
 		ExecID:      id,

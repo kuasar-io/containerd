@@ -89,6 +89,17 @@ message CreateTaskRequest {
 	google.protobuf.Any options = 9;
 
 	string runtime_path = 10;
+
+	// TaskAddress is the task api address, if it is non-empty,
+	// it means that there is already a running task api server(maybe provided by sandbox),
+	// just create a client to call the Task API directly, without shim process management.
+	string task_address = 11;
+
+	// Bundle is the bundle belongs to this task,
+	// as we may call sandbox api to prepare the task before task api is called,
+	// the bundle may be prepared by the sandbox, if so, containerd should skip
+	// the bundle creation before call the Task Create API
+	string bundle = 12;
 }
 
 message CreateTaskResponse {

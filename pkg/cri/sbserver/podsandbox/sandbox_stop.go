@@ -39,10 +39,6 @@ func (c *Controller) Stop(ctx context.Context, sandboxID string, _ ...sandbox.St
 			sandboxID, err)
 	}
 
-	if err := c.cleanupSandboxFiles(sandboxID, sandbox.Config); err != nil {
-		return fmt.Errorf("failed to cleanup sandbox files: %w", err)
-	}
-
 	// TODO: The Controller maintains its own Status instead of CRI's sandboxStore.
 	// Only stop sandbox container when it's running or unknown.
 	state := sandbox.Status.Get().State

@@ -80,17 +80,50 @@ func WithTimeout(timeout time.Duration) StopOpt {
 	}
 }
 
+type PrepareOpt func(*PrepareOptions)
+
+type PrepareOptions struct {
+	ContainerID string
+	ExecID      string
+	Spec        typeurl.Any
+	Rootfs      []*types.Mount
+	Stdin       string
+	Stdout      string
+	Stderr      string
+	Terminal    bool
+}
+
+type PrepareResult struct {
+	Bundle string
+}
+
+type UpdateResourceOptions struct {
+	ContainerID string
+	Resources   typeurl.Any
+	Annotations map[string]string
+}
+
+type UpdateResourceOpt func(*UpdateResourceOptions)
+
 // Controller is an interface to manage sandboxes at runtime.
 // When running in sandbox mode, shim expected to implement `SandboxService`.
 // Shim lifetimes are now managed manually via sandbox API by the containerd's client.
 type Controller interface {
 	// Create is used to initialize sandbox environment. (mounts, any)
-	Create(ctx context.Context, sandboxID string, opts ...CreateOpt) error
+	Create(ctx context.Context, sandboxInfo Sandbox, opts ...CreateOpt) error
 	// Start will start previously created sandbox.
 	Start(ctx context.Context, sandboxID string) (ControllerInstance, error)
 	// Platform returns target sandbox OS that will be used by Controller.
 	// containerd will rely on this to generate proper OCI spec.
 	Platform(_ctx context.Context, _sandboxID string) (platforms.Platform, error)
+	// Prepare will call the sandbox api to prepare the container resources
+	// and returns the bundle for the container
+	Prepare(ctx context.Context, sandboxID string, opts ...PrepareOpt) (PrepareResult, error)
+	// Purge will call the sandbox to purge the resources related to the container or exec process.
+	Purge(ctx context.Context, sandboxID string, containerID string, execID string) error
+	// UpdateResources updates the resources that the sandbox is managing,
+	// before sandbox total resources should be updated before updating the container resource
+	UpdateResources(ctx context.Context, sandboxID string, opts ...UpdateResourceOpt) error
 	// Stop will stop sandbox instance
 	Stop(ctx context.Context, sandboxID string, opts ...StopOpt) error
 	// Wait blocks until sandbox process exits.
@@ -115,11 +148,21 @@ type ExitStatus struct {
 }
 
 type ControllerStatus struct {
-	SandboxID string
-	Pid       uint32
-	State     string
-	Info      map[string]string
-	CreatedAt time.Time
-	ExitedAt  time.Time
-	Extra     typeurl.Any
+	SandboxID   string
+	Pid         uint32
+	State       string
+	TaskAddress string
+	Info        map[string]string
+	CreatedAt   time.Time
+	ExitedAt    time.Time
+	Extra       typeurl.Any
 }
+
+// State is current state of a sandbox (reported by `Status` call)
+// TODO the state should be a enum in sandbox.proto,
+// otherwise sandbox plugins don't know how to set the state
+const (
+	StateCreated string = "created"
+	StateReady   string = "ready"
+	StateStopped string = "stopped"
+)

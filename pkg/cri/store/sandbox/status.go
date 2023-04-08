@@ -105,6 +105,8 @@ type Status struct {
 	ExitStatus uint32
 	// State is the state of the sandbox.
 	State State
+	// TaskAddress is the task address for containerd to manage tasks in sandbox
+	TaskAddress string
 }
 
 // UpdateFunc is function used to update the sandbox status. If there

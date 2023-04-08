@@ -222,6 +222,20 @@ func (p *process) Delete(ctx context.Context, opts ...ProcessDeleteOpts) (*ExitS
 	if err != nil {
 		return nil, errdefs.FromGRPC(err)
 	}
+
+	cont, err := p.task.client.ContainerService().Get(ctx, p.task.id)
+	if err != nil {
+		return nil, err
+	}
+	if cont.SandboxID != "" {
+		sandbox, err := p.task.client.LoadSandbox(ctx, cont.SandboxID)
+		if err == nil {
+			if err := sandbox.Purge(ctx, p.task.id, p.id); err != nil && err != errdefs.ErrNotFound {
+				return nil, err
+			}
+		}
+	}
+
 	if p.io != nil {
 		p.io.Cancel()
 		p.io.Wait()

@@ -94,6 +94,7 @@ func (c *criService) RunPodSandbox(ctx context.Context, r *runtime.RunPodSandbox
 	}
 
 	sandboxInfo.Runtime.Name = ociRuntime.Type
+	sandboxInfo.Sandboxer = ociRuntime.Sandboxer
 
 	// Retrieve runtime options
 	runtimeOpts, err := generateRuntimeOptions(ociRuntime, c.config)
@@ -127,6 +128,7 @@ func (c *criService) RunPodSandbox(ctx context.Context, r *runtime.RunPodSandbox
 	if _, err := c.client.SandboxStore().Create(ctx, sandboxInfo); err != nil {
 		return nil, fmt.Errorf("failed to save sandbox metadata: %w", err)
 	}
+
 	defer func() {
 		if retErr != nil && cleanupErr == nil {
 			cleanupErr = c.client.SandboxStore().Delete(ctx, id)
@@ -213,6 +215,50 @@ func (c *criService) RunPodSandbox(ctx context.Context, r *runtime.RunPodSandbox
 		return nil, fmt.Errorf("unable to save sandbox %q to store: %w", id, err)
 	}
 
+	// Create sandbox container root directories.
+	sandboxRootDir := c.getSandboxRootDir(id)
+	if err := c.os.MkdirAll(sandboxRootDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create sandbox root directory %q: %w",
+			sandboxRootDir, err)
+	}
+	defer func() {
+		if retErr != nil && cleanupErr == nil {
+			// Cleanup the sandbox root directory.
+			if cleanupErr = c.os.RemoveAll(sandboxRootDir); cleanupErr != nil {
+				log.G(ctx).WithError(cleanupErr).Errorf("Failed to remove sandbox root directory %q",
+					sandboxRootDir)
+			}
+		}
+	}()
+
+	volatileSandboxRootDir := c.getVolatileSandboxRootDir(id)
+	if err := c.os.MkdirAll(volatileSandboxRootDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create volatile sandbox root directory %q: %w",
+			volatileSandboxRootDir, err)
+	}
+	defer func() {
+		if retErr != nil && cleanupErr == nil {
+			// Cleanup the volatile sandbox root directory.
+			if cleanupErr = c.os.RemoveAll(volatileSandboxRootDir); cleanupErr != nil {
+				log.G(ctx).WithError(cleanupErr).Errorf("Failed to remove volatile sandbox root directory %q",
+					volatileSandboxRootDir)
+			}
+		}
+	}()
+
+	// Setup files required for the sandbox.
+	if err = c.setupSandboxFiles(id, config); err != nil {
+		return nil, fmt.Errorf("failed to setup sandbox files: %w", err)
+	}
+	defer func() {
+		if retErr != nil && cleanupErr == nil {
+			if cleanupErr = c.cleanupSandboxFiles(id, config); cleanupErr != nil {
+				log.G(ctx).WithError(cleanupErr).Errorf("Failed to cleanup sandbox files in %q",
+					sandboxRootDir)
+			}
+		}
+	}()
+
 	controller, err := c.getSandboxController(config, r.GetRuntimeHandler())
 	if err != nil {
 		return nil, fmt.Errorf("failed to get sandbox controller: %w", err)
@@ -225,7 +271,7 @@ func (c *criService) RunPodSandbox(ctx context.Context, r *runtime.RunPodSandbox
 
 	runtimeStart := time.Now()
 
-	if err := controller.Create(ctx, id, sb.WithOptions(config), sb.WithNetNSPath(sandbox.NetNSPath)); err != nil {
+	if err := controller.Create(ctx, sandboxInfo, sb.WithOptions(config), sb.WithNetNSPath(sandbox.NetNSPath)); err != nil {
 		return nil, fmt.Errorf("failed to create sandbox %q: %w", id, err)
 	}
 
@@ -247,13 +293,19 @@ func (c *criService) RunPodSandbox(ctx context.Context, r *runtime.RunPodSandbox
 	}
 
 	// TODO: get rid of this. sandbox object should no longer have Container field.
-	if ociRuntime.SandboxMode == string(criconfig.ModePodSandbox) {
+	if ociRuntime.Sandboxer == string(criconfig.ModePodSandbox) {
 		container, err := c.client.LoadContainer(ctx, id)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load container %q for sandbox: %w", id, err)
 		}
 		sandbox.Container = container
 	}
+
+	sandboxInstance, err := c.client.LoadSandbox(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load sandbox after started, %w", err)
+	}
+	sandbox.SandboxInstance = sandboxInstance
 
 	labels := ctrl.Labels
 	if labels == nil {
@@ -275,11 +327,17 @@ func (c *criService) RunPodSandbox(ctx context.Context, r *runtime.RunPodSandbox
 		}
 	}()
 
+	sandboxStatus, err := sandboxInstance.Status(ctx, false)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get sandbox status after started, %w", err)
+	}
+
 	if err := sandbox.Status.Update(func(status sandboxstore.Status) (sandboxstore.Status, error) {
 		// Set the pod sandbox as ready after successfully start sandbox container.
 		status.Pid = ctrl.Pid
 		status.State = sandboxstore.StateReady
 		status.CreatedAt = ctrl.CreatedAt
+		status.TaskAddress = sandboxStatus.TaskAddress
 		return status, nil
 	}); err != nil {
 		return nil, fmt.Errorf("failed to update sandbox status: %w", err)
@@ -576,25 +634,6 @@ func (c *criService) getSandboxRuntime(config *runtime.PodSandboxConfig, runtime
 		return criconfig.Runtime{}, fmt.Errorf("no runtime for %q is configured", runtimeHandler)
 	}
 	return handler, nil
-}
-
-// getSandboxController returns the sandbox controller configuration for sandbox.
-// If absent in legacy case, it will return the default controller.
-func (c *criService) getSandboxController(config *runtime.PodSandboxConfig, runtimeHandler string) (sb.Controller, error) {
-	ociRuntime, err := c.getSandboxRuntime(config, runtimeHandler)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get sandbox runtime: %w", err)
-	}
-	// Validate mode
-	if err = ValidateMode(ociRuntime.SandboxMode); err != nil {
-		return nil, err
-	}
-	// Use sandbox controller to delete sandbox
-	controller, exist := c.sandboxControllers[criconfig.SandboxControllerMode(ociRuntime.SandboxMode)]
-	if !exist {
-		return nil, fmt.Errorf("sandbox controller %s not exist", ociRuntime.SandboxMode)
-	}
-	return controller, nil
 }
 
 func logDebugCNIResult(ctx context.Context, sandboxID string, result *cni.Result) {

@@ -34,9 +34,23 @@ import (
 	ctrdutil "github.com/containerd/containerd/pkg/cri/util"
 	osinterface "github.com/containerd/containerd/pkg/os"
 	"github.com/containerd/containerd/platforms"
+	"github.com/containerd/containerd/plugin"
 	"github.com/containerd/containerd/protobuf"
 	"github.com/containerd/containerd/sandbox"
 )
+
+func init() {
+	plugin.Register(&plugin.Registration{
+		Type:     plugin.SandboxControllerPlugin,
+		ID:       "podsandbox",
+		Requires: []plugin.Type{},
+		InitFn: func(ic *plugin.InitContext) (interface{}, error) {
+			// register the global controller to containerd plugin manager,
+			// the global controller will be initialized when cri plugin is initializing
+			return controller, nil
+		},
+	})
+}
 
 // CRIService interface contains things required by controller, but not yet refactored from criService.
 // TODO: this will be removed in subsequent iterations.
@@ -50,6 +64,11 @@ type CRIService interface {
 	// GenerateAndSendContainerEvent is called by controller for sandbox container events.
 	GenerateAndSendContainerEvent(ctx context.Context, containerID string, sandboxID string, eventType runtime.ContainerEventType)
 }
+
+// As the dependency from this controller to cri plugin is hard to decouple,
+// we define a global podsandbox controller and register it to containerd plugin manager first,
+// we will initialize this controller when we initialize the cri plugin.
+var controller = &Controller{}
 
 type Controller struct {
 	// config contains all configurations.
@@ -68,23 +87,21 @@ type Controller struct {
 	store *Store
 }
 
-func New(
+func Init(
 	config criconfig.Config,
 	client *containerd.Client,
 	sandboxStore *sandboxstore.Store,
 	os osinterface.OS,
 	cri CRIService,
 	baseOCISpecs map[string]*oci.Spec,
-) *Controller {
-	return &Controller{
-		config:       config,
-		client:       client,
-		sandboxStore: sandboxStore,
-		os:           os,
-		cri:          cri,
-		baseOCISpecs: baseOCISpecs,
-		store:        NewStore(),
-	}
+) {
+	controller.cri = cri
+	controller.client = client
+	controller.config = config
+	controller.sandboxStore = sandboxStore
+	controller.os = os
+	controller.baseOCISpecs = baseOCISpecs
+	controller.store = NewStore()
 }
 
 var _ sandbox.Controller = (*Controller)(nil)
@@ -146,6 +163,18 @@ func (c *Controller) waitSandboxExit(ctx context.Context, id string, exitCh <-ch
 		return exitStatus, exitedAt, ctx.Err()
 	}
 	return
+}
+
+func (c *Controller) Prepare(ctx context.Context, sandboxID string, opts ...sandbox.PrepareOpt) (sandbox.PrepareResult, error) {
+	return sandbox.PrepareResult{}, nil
+}
+
+func (c *Controller) Purge(ctx context.Context, sandboxID string, containerID string, execID string) error {
+	return nil
+}
+
+func (c *Controller) UpdateResources(ctx context.Context, sandboxID string, opts ...sandbox.UpdateResourceOpt) error {
+	return nil
 }
 
 // handleSandboxExit handles TaskExit event for sandbox.
