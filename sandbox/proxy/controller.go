@@ -66,10 +66,11 @@ func (s *remoteSandboxController) Start(ctx context.Context, sandboxID string) (
 	}
 
 	return sandbox.ControllerInstance{
-		SandboxID: sandboxID,
-		Pid:       resp.GetPid(),
-		CreatedAt: resp.GetCreatedAt().AsTime(),
-		Labels:    resp.GetLabels(),
+		SandboxID:   sandboxID,
+		Pid:         resp.GetPid(),
+		CreatedAt:   resp.GetCreatedAt().AsTime(),
+		Labels:      resp.GetLabels(),
+		TaskAddress: resp.GetTaskAddress(),
 	}, nil
 }
 

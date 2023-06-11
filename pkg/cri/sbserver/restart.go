@@ -29,6 +29,7 @@ import (
 	"github.com/containerd/containerd/errdefs"
 	containerdimages "github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/log"
+	"github.com/containerd/containerd/pkg/cri/config"
 	cio "github.com/containerd/containerd/pkg/cri/io"
 	"github.com/containerd/containerd/pkg/cri/sbserver/podsandbox"
 	containerstore "github.com/containerd/containerd/pkg/cri/store/container"
@@ -37,6 +38,7 @@ import (
 	"github.com/containerd/containerd/pkg/netns"
 	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/runtime/v2/shim"
+	containerdsandbox "github.com/containerd/containerd/sandbox"
 	"github.com/containerd/typeurl/v2"
 	"golang.org/x/sync/errgroup"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
@@ -68,6 +70,28 @@ func (c *criService) recover(ctx context.Context) error {
 				log.G(ctx2).WithError(err).Errorf("Failed to load sandbox %q", sandbox.ID())
 				return nil
 			}
+
+			sbIns, err := c.client.LoadSandbox(ctx, sb.ID)
+			if err != nil {
+				// only handle NotFound error
+				if !errdefs.IsNotFound(err) {
+					return err
+				}
+				// If it is not found in the Sandbox DB,
+				// it must be a legacy sandbox, which is created in an old version,
+				// that a sandbox is only stored as a pause container with a label.
+				// for backward compatibility, we create a SandboxInstance for it.
+				sb.SandboxInstance = containerd.SandboxFromRecord(c.client,
+					containerdsandbox.Sandbox{
+						ID:        sb.ID,
+						Sandboxer: string(config.ModePodSandbox),
+					})
+			} else {
+				// As we can load this sandbox from db,
+				// it must be created by the new "podsandbox" controller
+				sb.SandboxInstance = sbIns
+			}
+
 			log.G(ctx2).Debugf("Loaded sandbox %+v", sb)
 			if err := c.sandboxStore.Add(sb); err != nil {
 				return fmt.Errorf("failed to add sandbox %q to store: %w", sandbox.ID(), err)
