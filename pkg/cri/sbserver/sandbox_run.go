@@ -327,17 +327,12 @@ func (c *criService) RunPodSandbox(ctx context.Context, r *runtime.RunPodSandbox
 		}
 	}()
 
-	sandboxStatus, err := sandboxInstance.Status(ctx, false)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get sandbox status after started, %w", err)
-	}
-
 	if err := sandbox.Status.Update(func(status sandboxstore.Status) (sandboxstore.Status, error) {
 		// Set the pod sandbox as ready after successfully start sandbox container.
 		status.Pid = ctrl.Pid
 		status.State = sandboxstore.StateReady
 		status.CreatedAt = ctrl.CreatedAt
-		status.TaskAddress = sandboxStatus.TaskAddress
+		status.TaskAddress = ctrl.TaskAddress
 		return status, nil
 	}); err != nil {
 		return nil, fmt.Errorf("failed to update sandbox status: %w", err)

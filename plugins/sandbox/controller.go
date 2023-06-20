@@ -155,9 +155,10 @@ func (c *controllerLocal) Start(ctx context.Context, sandboxID string) (sandbox.
 	}
 
 	return sandbox.ControllerInstance{
-		SandboxID: sandboxID,
-		Pid:       resp.GetPid(),
-		CreatedAt: resp.GetCreatedAt().AsTime(),
+		SandboxID:   sandboxID,
+		Pid:         resp.GetPid(),
+		TaskAddress: shim.Address(),
+		CreatedAt:   resp.GetCreatedAt().AsTime(),
 	}, nil
 }
 

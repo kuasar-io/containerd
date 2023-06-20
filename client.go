@@ -283,7 +283,7 @@ func (c *Client) Sandboxes(ctx context.Context, filters ...string) ([]Sandbox, e
 	}
 	var out []Sandbox
 	for _, s := range r {
-		out = append(out, sandboxFromRecord(c, s))
+		out = append(out, SandboxFromRecord(c, s))
 	}
 	return out, nil
 }

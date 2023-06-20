@@ -64,7 +64,7 @@ type sandboxInstance struct {
 	metadata api.Sandbox
 }
 
-func sandboxFromRecord(client *Client, s api.Sandbox) *sandboxInstance {
+func SandboxFromRecord(client *Client, s api.Sandbox) *sandboxInstance {
 	return &sandboxInstance{
 		client:   client,
 		metadata: s,

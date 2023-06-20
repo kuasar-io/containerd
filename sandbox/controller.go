@@ -136,10 +136,11 @@ type Controller interface {
 }
 
 type ControllerInstance struct {
-	SandboxID string
-	Pid       uint32
-	CreatedAt time.Time
-	Labels    map[string]string
+	SandboxID   string
+	Pid         uint32
+	CreatedAt   time.Time
+	TaskAddress string
+	Labels      map[string]string
 }
 
 type ExitStatus struct {
