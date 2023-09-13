@@ -468,6 +468,18 @@ func (pc *proxyClients) getClient(address string) (*grpc.ClientConn, error) {
 	connParams := grpc.ConnectParams{
 		Backoff: backoffConfig,
 	}
+	retryPolicy := `{
+		"methodConfig": [{
+		  "name": [{"service": "containerd.services.sandbox.v1.Controller", "method": "Wait"}],
+		  "waitForReady": true,
+		  "retryPolicy": {
+			  "MaxAttempts": 10000,
+			  "InitialBackoff": ".1s",
+			  "MaxBackoff": "10s",
+			  "BackoffMultiplier": 2.0,
+			  "RetryableStatusCodes": [ "UNAVAILABLE" ]
+		  }
+		}]}`
 	gopts := []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithConnectParams(connParams),
@@ -476,6 +488,7 @@ func (pc *proxyClients) getClient(address string) (*grpc.ClientConn, error) {
 		// TODO(stevvooe): We may need to allow configuration of this on the client.
 		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(defaults.DefaultMaxRecvMsgSize)),
 		grpc.WithDefaultCallOptions(grpc.MaxCallSendMsgSize(defaults.DefaultMaxSendMsgSize)),
+		grpc.WithDefaultServiceConfig(retryPolicy),
 	}
 
 	conn, err := grpc.Dial(dialer.DialAddress(address), gopts...)
