@@ -220,7 +220,12 @@ func (m *ShimManager) Start(ctx context.Context, id string, opts runtime.CreateO
 			return nil, err
 		}
 
-		shim, err := loadShim(ctx, bundle, func() {})
+		shim, err := loadShim(ctx, bundle, func() {
+			if err := bundle.Delete(); err != nil {
+				log.G(ctx).Errorf("failed to delete bundle %w", err)
+			}
+			m.shims.Delete(ctx, id)
+		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to load sandbox task %q: %w", opts.TaskAddress, err)
 		}
