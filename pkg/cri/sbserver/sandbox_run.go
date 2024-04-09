@@ -34,6 +34,7 @@ import (
 
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/log"
+	"github.com/containerd/containerd/pkg/cleanup"
 	"github.com/containerd/containerd/pkg/cri/annotations"
 	criconfig "github.com/containerd/containerd/pkg/cri/config"
 	"github.com/containerd/containerd/pkg/cri/sbserver/podsandbox"
@@ -274,6 +275,15 @@ func (c *criService) RunPodSandbox(ctx context.Context, r *runtime.RunPodSandbox
 	if err := controller.Create(ctx, sandboxInfo, sb.WithOptions(config), sb.WithNetNSPath(sandbox.NetNSPath)); err != nil {
 		return nil, fmt.Errorf("failed to create sandbox %q: %w", id, err)
 	}
+	defer func() {
+		if retErr != nil && cleanupErr == nil {
+			deferCtx, deferCancel := context.WithTimeout(cleanup.Background(ctx), 10*time.Second)
+			defer deferCancel()
+			if cleanupErr = controller.Shutdown(deferCtx, sandbox.ID); cleanupErr != nil {
+				log.G(ctx).WithError(cleanupErr).Errorf("Failed to shutdown sandbox")
+			}
+		}
+	}()
 
 	ctrl, err := controller.Start(ctx, id)
 	if err != nil {
