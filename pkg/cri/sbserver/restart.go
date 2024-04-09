@@ -133,6 +133,13 @@ func (c *criService) recover(ctx context.Context) error {
 			if code, ok := runtime.PodSandboxState_value[status.State]; ok {
 				if code == int32(runtime.PodSandboxState_SANDBOX_READY) {
 					state = sandboxstore.StateReady
+					exitCh, err := sbx.Wait(ctx)
+					if err != nil {
+						// Wait sandbox is not mandatory, if failed, we can still recover it.
+						log.G(ctx).WithError(err).Errorf("failed to wait sandbox %s", sbx.ID())
+					} else {
+						c.eventMonitor.startSandboxExitMonitor(ctx, sbx.ID(), status.Pid, exitCh)
+					}
 				} else if code == int32(runtime.PodSandboxState_SANDBOX_NOTREADY) {
 					state = sandboxstore.StateNotReady
 				}
@@ -143,6 +150,7 @@ func (c *criService) recover(ctx context.Context) error {
 			State:       state,
 			Pid:         status.Pid,
 			TaskAddress: status.TaskAddress,
+			CreatedAt:   status.CreatedAt,
 		})
 
 		// Load network namespace.

@@ -391,6 +391,14 @@ func handleContainerExit(ctx context.Context, e *eventtypes.TaskExit, cntr conta
 			}
 			// Move on to make sure container status is updated.
 		}
+
+		sandbox, err := c.sandboxStore.Get(sandboxID)
+		if err != nil {
+			return fmt.Errorf("failed to find sandbox id %q: %w", sandboxID, err)
+		}
+		if err := sandbox.SandboxInstance.Purge(ctx, cntr.ID, ""); err != nil {
+			return fmt.Errorf("failed to purge container %q: %w", cntr.ID, err)
+		}
 	}
 	err = cntr.Status.UpdateSync(func(status containerstore.Status) (containerstore.Status, error) {
 		if status.FinishedAt == 0 {

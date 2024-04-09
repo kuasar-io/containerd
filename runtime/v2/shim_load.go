@@ -109,25 +109,29 @@ func (m *ShimManager) loadShims(ctx context.Context) error {
 			log.G(ctx).WithError(err).Error("failed to read `runtime` path from bundle")
 		}
 
-		// Query runtime name from metadata store
-		if runtime == "" {
-			container, err := m.containers.Get(ctx, id)
-			if err != nil {
-				log.G(ctx).WithError(err).Errorf("loading container %s", id)
-				if err := mount.UnmountRecursive(filepath.Join(bundle.Path, "rootfs"), 0); err != nil {
-					log.G(ctx).WithError(err).Errorf("failed to unmount of rootfs %s", id)
+		container, err := m.containers.Get(ctx, id)
+		_, err = m.containers.Get(ctx, container.SandboxID)
+		// This container's sandbox is pause container, not a real sandbox
+		if err == nil {
+			// Query runtime name from metadata store
+			if runtime == "" {
+				if err != nil {
+					log.G(ctx).WithError(err).Errorf("loading container %s", id)
+					if err := mount.UnmountRecursive(filepath.Join(bundle.Path, "rootfs"), 0); err != nil {
+						log.G(ctx).WithError(err).Errorf("failed to unmount of rootfs %s", id)
+					}
+					bundle.Delete()
+					continue
 				}
+				runtime = container.Runtime.Name
+			}
+
+			runtime, err = m.resolveRuntimePath(runtime)
+			if err != nil {
 				bundle.Delete()
+				log.G(ctx).WithError(err).Error("failed to resolve runtime path")
 				continue
 			}
-			runtime = container.Runtime.Name
-		}
-
-		runtime, err = m.resolveRuntimePath(runtime)
-		if err != nil {
-			bundle.Delete()
-			log.G(ctx).WithError(err).Error("failed to resolve runtime path")
-			continue
 		}
 
 		binaryCall := shimBinary(bundle,

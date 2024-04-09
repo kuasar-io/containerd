@@ -196,7 +196,9 @@ func (m *ShimManager) Start(ctx context.Context, id string, opts runtime.CreateO
 			Path:      opts.Bundle,
 			Namespace: ns,
 		}
-		if err := os.Symlink(opts.Bundle, filepath.Join(m.state, ns, id)); err != nil {
+		taskDir := filepath.Join(m.state, ns, id)
+		_ = os.MkdirAll(filepath.Dir(taskDir), 0755)
+		if err := os.Symlink(opts.Bundle, taskDir); err != nil {
 			return nil, err
 		}
 	} else {
