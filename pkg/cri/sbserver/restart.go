@@ -143,6 +143,7 @@ func (c *criService) recover(ctx context.Context) error {
 			State:       state,
 			Pid:         status.Pid,
 			TaskAddress: status.TaskAddress,
+			CreatedAt:   status.CreatedAt,
 		})
 
 		// Load network namespace.
